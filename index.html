@@ -58,6 +58,13 @@ function marketChoice(m,g){
  }
  if(/ 1\+ gol$/.test(target)){
   const team=target.slice(0,-7);if(!hasTeam(q+' '+title,team))return null;
+  if(typ==='soccer team totals'||typ==='soccer_team_totals'||/team-total-(home|away)-/.test(m.slug||'')){
+   const side=norm(team)===norm(g[0])?'home':norm(team)===norm(g[1])?'away':null;
+   const slugSide=(m.slug||'').match(/team-total-(home|away)-/i)?.[1];
+   if(side&&slugSide&&side!==slugSide)return null;
+   const named=(q.split(':').slice(1).join(':').split('o/u')[0]||'').trim();
+   if(named&&!hasTeam(named,team))return null;
+  }
   if(/both teams|match total|total match|spread|handicap/.test(full))return null;
   if(!/team|score|goal/.test(full+' '+typ))return null;
   if(!/0[ .]5|at least 1|1 or more|1 goal|score a goal/.test(full+' '+outcomes.join(' ')))return null;
