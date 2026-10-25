@@ -24,14 +24,58 @@ function hasTeam(t,name){return (alias[norm(name)]||[name]).some(n=>norm(t).incl
 function parse(x){try{return typeof x==='string'?JSON.parse(x):x}catch{return []}}
 async function get(u){const r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
 function matchesEvent(e,g,date){return hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])&&String(e.eventDate||e.startTime||e.endDate||'').slice(0,10)===date}
-function matchMarket(m,g){const raw=[m.question,m.groupItemTitle,m.slug,m.sportsMarketType,m.marketMetadata?.opticOddsMarketName,m.marketMetadata?.opticOddsSelection].join(' ');const q=norm(raw),target=g[2],total=/^(Over|Under)/.test(target);
-if(/first half|1st half|half time|half-time|corners|cards|shots/.test(q))return false;
-if(total){if(/team total/.test(q))return false;const direction=target.startsWith('Under')?'under':'over',line=target.match(/[0-9],[0-9]/)?.[0].replace(',','.')||'';return q.includes(direction)&&new RegExp('(^| )'+line.replace('.','[ .]')+'( |$)').test(q)}
-const team=target.replace(/ 1\+ gol$/,'');return hasTeam(q,team)&&/(over 0[ .]5|over 0 5|1 goal|1 goals|to score at least 1|team total)/.test(q)}
-async function lookup(g,date){let found=[];for(const term of [g[0]+' '+g[1],g[0],g[1]]){try{const data=await get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=50');found.push(...(data.events||[]))}catch(e){if(!found.length&&term===g[1])throw e}if(found.some(e=>matchesEvent(e,g,date)))break}
-let events=found.filter(e=>matchesEvent(e,g,date));if(!events.length)return {status:'Evento não localizado'};let ev=events[0];let slugs=[ev.slug+'-more-markets'];for(const slug of slugs){try{let more=await get('https://gamma-api.polymarket.com/events?slug='+encodeURIComponent(slug));events.push(...more)}catch(e){}}
-let markets=events.flatMap(e=>e.markets||[]),foundM=markets.filter(m=>matchMarket(m,g));if(!foundM.length)return {status:'Mercado não localizado',event:ev};if(foundM.length>1)return {status:'Mercado ambíguo ('+foundM.length+')',event:ev};let m=foundM[0],out=parse(m.outcomes),tokens=parse(m.clobTokenIds),yes=Math.max(0,out.findIndex(x=>norm(x)==='yes')),token=tokens[yes];if(!token)return {status:'Token CLOB ausente',event:ev};
-try{const book=await get('https://clob.polymarket.com/book?token_id='+encodeURIComponent(token));const asks=(book.asks||[]).map(x=>Number(x.price)).filter(x=>x>0&&x<1);if(!asks.length)return {status:'Sem ofertas ASK',event:ev};let price=Math.min(...asks);return {status:'CLOB: ASK',price,odd:1/price,event:ev,market:m}}catch(e){return {status:'CLOB: '+e.message,event:ev}}}
+function marketChoice(m,g){
+ const q=norm(m.question||''), title=norm(m.groupItemTitle||''), meta=norm(m.marketMetadata?.opticOddsMarketName||''), outcomes=parse(m.outcomes).map(norm),target=g[2];
+ if(/first half|1st half|half time|half-time|corners|cards|shots|booking/.test(q+' '+meta))return null;
+ if(/^(Over|Under)/.test(target)){
+   const direction=target.startsWith('Under')?'under':'over',line=target.match(/[0-9],[0-9]/)?.[0].replace(',','.');
+   const lineRe=new RegExp('(^| )'+line.replace('.','[ .]')+'( |$)');
+   if(/team total|team goals|individual|player|first team|second team/.test(q+' '+meta))return null;
+   if(!lineRe.test(q+' '+title+' '+meta))return null;
+   const yesIndex=outcomes.indexOf('yes');
+   if(yesIndex>=0){
+     if(q.includes(direction))return {index:yesIndex,score:10};
+     if(q.includes(direction==='over'?'under':'over'))return {index:outcomes.indexOf('no'),score:5};
+   }
+   const ix=outcomes.findIndex(o=>o.includes(direction));
+   if(ix>=0)return {index:ix,score:9};
+   return null;
+ }
+ const team=target.replace(/ 1\\+ gol$/,'');
+ if(!hasTeam(q+' '+title,team))return null;
+ if(!/(team total|total goals|goals scored|score at least|score 1|over 0[ .]5)/.test(q+' '+meta))return null;
+ if(/both teams|match total|total match/.test(q))return null;
+ const yesIndex=outcomes.indexOf('yes');
+ if(yesIndex>=0 && /(over 0[ .]5|at least 1|score 1 or more|1\+ goal)/.test(q))return {index:yesIndex,score:10};
+ if(/over 0[ .]5/.test(q)&&outcomes.includes('yes'))return {index:yesIndex,score:8};
+ return null;
+}
+async function lookup(g,date){
+ let found=[],errors=[];
+ for(const term of [g[0]+' '+g[1],g[0],g[1]]){
+  try{const data=await get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=50');found.push(...(data.events||[]))}
+  catch(e){errors.push(e.message)}
+ }
+ let events=[...new Map(found.filter(e=>matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
+ if(!events.length)return {status:errors.length===3?'API: '+errors[0]:'Evento não localizado'};
+ let extras=await Promise.all(events.map(async ev=>{try{return await get('https://gamma-api.polymarket.com/events?slug='+encodeURIComponent(ev.slug+'-more-markets'))}catch{return []}}));
+ events.push(...extras.flat());
+ let all=[...new Map(events.flatMap(e=>e.markets||[]).map(m=>[m.id,m])).values()];
+ let candidates=all.map(m=>({m,choice:marketChoice(m,g)})).filter(x=>x.choice&&x.choice.index>=0);
+ if(!candidates.length)return {status:'Mercado não localizado',event:events[0]};
+ candidates.sort((a,b)=>b.choice.score-a.choice.score);
+ let best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
+ if(best.length>1)return {status:'Ambíguo: '+best.length+' contratos ('+best.slice(0,2).map(x=>x.m.question).join(' | ').slice(0,90)+')',event:events[0]};
+ const {m,choice}=best[0],tokens=parse(m.clobTokenIds),token=tokens[choice.index];
+ if(!token)return {status:'Token CLOB ausente',event:events[0]};
+ try{
+  const book=await get('https://clob.polymarket.com/book?token_id='+encodeURIComponent(token));
+  const asks=(book.asks||[]).map(x=>Number(x.price)).filter(x=>x>0&&x<1);
+  if(!asks.length)return {status:'Sem ofertas ASK',event:events[0]};
+  const price=Math.min(...asks);
+  return {status:'CLOB: ASK',price,odd:1/price,event:events[0],market:m};
+ }catch(e){return {status:'CLOB: '+e.message,event:events[0]}}
+}
 function render(){let body=$('rows');body.replaceChildren();results.forEach((r,i)=>{let g=games[i],tr=document.createElement('tr');let cells=[i+1,g[0]+' × '+g[1],g[2],g[3].toFixed(1).replace('.',','),r?.price?(r.price*100).toFixed(1)+'¢':'—',r?.odd?r.odd.toFixed(2).replace('.',','):'—',r?.status||'Aguardando'];cells.forEach((v,j)=>{let td=document.createElement('td');td.textContent=v;if(j===6)td.className=r?.price?'ok':'warn';tr.appendChild(td)});body.appendChild(tr)})}
 render();
 $('go').addEventListener('click',async()=>{$('go').disabled=true;$('csv').disabled=true;results=games.map(()=>null);render();let ok=0,date=$('date').value;for(let i=0;i<games.length;i++){$('status').textContent='Consultando '+(i+1)+'/20: '+games[i][0]+' × '+games[i][1];try{results[i]=await lookup(games[i],date);if(results[i].price)ok++}catch(e){results[i]={status:'Erro: '+e.message}}render()}$('status').textContent='Concluído: '+ok+'/20 cotações. Se aparecer “Failed to fetch”, o navegador provavelmente bloqueou CORS; será necessário um proxy seguro.';$('count').textContent=ok+'/20 cotações';$('csv').disabled=false;$('go').disabled=false});
