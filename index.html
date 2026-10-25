@@ -5,32 +5,25 @@
 :root{color-scheme:dark}*{box-sizing:border-box}body{background:#0a101d;color:#edf4ff;font:15px system-ui;margin:0}main{max-width:1100px;margin:auto;padding:20px}h1{font-size:26px}p,small{color:#b1c1d9}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:20px 0}label{display:grid;gap:5px}button,input{border-radius:9px;padding:12px;border:1px solid #3a4a64;background:#18283e;color:white;font:inherit}button{background:#136bd4;cursor:pointer}button:disabled{opacity:.5}.table{overflow:auto;border:1px solid #293a54;border-radius:12px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:12px 10px;text-align:left;border-bottom:1px solid #25334a}th{background:#14223a}td:nth-child(5),td:nth-child(6),td:nth-child(7){text-align:right}.ok{color:#68e5ac}.warn{color:#ffc77d}a{color:#8fc5ff}#status{padding:12px;background:#162238;border-radius:10px;white-space:pre-wrap}
 </style></head><body><main>
 <h1>ADR <span style="color:#62b5ff">× Polymarket</span></h1>
-<p>Consultor de odds para 15 jogos ADR, com indicação principal e alternativa. Cotação indicativa de compra (YES), sem taxas. Não realiza apostas.</p>
-<div class="controls"><label>Data dos jogos<input id="date" type="date" value="2026-10-25"></label><button id="go">Consultar 30 mercados</button><button id="csv" disabled>Exportar CSV</button></div>
+<p>Consultor de odds para 8 jogos ADR, com indicação principal e alternativa. Cotação indicativa de compra (YES), sem taxas. Não realiza apostas.</p>
+<div class="controls"><label>Data dos jogos<input id="date" type="date" value="2026-10-25"></label><button id="go">Consultar 16 mercados (lote)</button><button id="csv" disabled>Exportar CSV</button></div>
 <div id="status" role="status">Pronto para consultar. Esta página precisa estar hospedada em HTTPS; caso a API bloqueie CORS, os erros serão exibidos.</div>
-<p id="count">0/30 cotações</p>
+<p id="count">0/16 cotações</p>
 <div class="table"><table><thead><tr><th>#</th><th>Jogo</th><th>Prioridade</th><th>Mercado</th><th>Força</th><th>Preço YES</th><th>Odd</th><th>Resultado da consulta</th></tr></thead><tbody id="rows"></tbody></table></div>
 <p><small>Fontes: Gamma API e CLOB API públicas da Polymarket. Confirme regras, liquidez, preço final e taxas antes de operar. Mercados não localizados não recebem odds inventadas.</small></p>
 </main><script>
 const games=[
-['NEC','Groningen','Over 1,5 FT',8.8,'Over 2,5 FT',7.8],
-['Fortuna Sittard','Excelsior','Over 2,5 FT',8.7,'Over 1,5 FT',8.6],
-['AZ','Twente','Over 1,5 FT',8.6,'AZ 1+ gol',8.2],
-['Celta','Betis','Over 1,5 FT',8.5,'BTTS',7.6],
-['Marseille','Le Havre','Over 1,5 FT',8.3,'Marseille 1+ gol',8.0],
-['Angers','Lorient','Under 3,5 FT',8.2,'Lorient 1+ gol',7.4],
-['Lecce','Juventus','Under 3,5 FT',8.2,'Juventus X2',7.8],
-['Sunderland','Leeds','Under 3,5 FT',8.2,'Under 2,5 FT',7.5],
-['Monaco','Lille','Under 3,5 FT',8.2,'Over 1,5 FT',7.6],
-['Udinese','Milan','Under 3,5 FT',8.2,'Milan X2',7.6],
-['PSV','Feyenoord','Over 2,5 FT',8.0,'BTTS',8.0],
-['Freiburg','Bayern','Over 1,5 FT',8.0,'Bayern 1+ gol',8.0],
-['Manchester United','Bournemouth','Over 1,5 FT',8.0,'Manchester United 1+ gol',8.1],
-['Genoa','Venezia','Under 3,5 FT',8.0,'Over 1,5 FT',7.8],
-['Atalanta','Frosinone','Under 3,5 FT',8.0,'Atalanta 1+ gol',7.0]
+['AZ','Twente','Over 1,5 FT',8.4,'BTTS',7.9],
+['Union SG','Cercle Brugge','Union SG 1+ gol',8.2,'Union SG ML',8.0],
+['Molde','Fredrikstad','Over 1,5 FT',8.1,'Molde 1+ gol',8.0],
+['Lecce','Juventus','Under 3,5 FT',8.1,'Juventus X2',7.8],
+['Sporting CP','Académico Viseu','Sporting CP 1+ gol',8.0,'Over 1,5 FT',7.8],
+['Castellón','Sporting Gijón','Castellón 1+ gol',8.0,'Under 3,5 FT',7.4],
+['AGF','Viborg','Over 1,5 FT',8.0,'BTTS',7.7],
+['Udinese','Milan','Under 3,5 FT',7.9,'Milan X2',7.6]
 ];
 const $=id=>document.getElementById(id);let results=games.map(()=>[null,null]);
-const alias={'inter':['internazionale','inter milan','inter'],'milan':['ac milan','milan'],'psv':['psv eindhoven','psv'],'feyenoord':['feyenoord rotterdam','feyenoord'],'real sociedad':['sociedad','real sociedad'],'manchester united':['man united','manchester united'],'az':['az alkmaar','az'],'nec':['nec nijmegen','nec'],'betis':['real betis','betis'],'marseille':['olympique marseille','marseille'],'monaco':['as monaco','monaco'],'bayern':['bayern munich','bayern']};
+const alias={'inter':['internazionale','inter milan','inter'],'milan':['ac milan','milan'],'psv':['psv eindhoven','psv'],'feyenoord':['feyenoord rotterdam','feyenoord'],'real sociedad':['sociedad','real sociedad'],'manchester united':['man united','manchester united'],'az':['az alkmaar','az'],'union sg':['union saint gilloise','union sg','royale union saint gilloise'],'cercle brugge':['cercle brugge','cercle'],'sporting cp':['sporting lisbon','sporting clube de portugal','sporting cp'],'academico viseu':['academico viseu','academico'],'castellon':['cd castellon','castellon'],'sporting gijon':['sporting gijon','real sporting'],'agf':['aarhus','agf'],'molde':['molde fk','molde'],'nec':['nec nijmegen','nec'],'betis':['real betis','betis'],'marseille':['olympique marseille','marseille'],'monaco':['as monaco','monaco'],'bayern':['bayern munich','bayern']};
 function norm(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 function hasTeam(t,name){return (alias[norm(name)]||[name]).some(n=>norm(t).includes(norm(n)))}
 function parse(x){try{return typeof x==='string'?JSON.parse(x):x}catch{return []}}
@@ -44,6 +37,7 @@ function marketChoice(m,g){
   if(!/both teams to score|btts/.test(q+' '+title+' '+typ))return null;
   const idx=outcomes.indexOf('yes');return idx<0?null:{index:idx,score:20};
  }
+ if(/ ML$/.test(target)){const team=target.replace(/ ML$/,'');if(typ!=='moneyline'||!hasTeam(q,team)||!/win|winner/.test(q))return null;const idx=outcomes.indexOf('yes');return idx<0?null:{index:idx,score:20};}
  if(/ X2$/.test(target)){
   const opponent=g[0];if(typ!=='moneyline'||!hasTeam(q,opponent)||!/win|winner/.test(q))return null;
   if(!/yes/.test(outcomes.join(' '))||!outcomes.includes('no'))return null;
@@ -87,33 +81,30 @@ async function loadMarkets(ev){
  }
  return [...new Map(all.filter(m=>m&&m.id).map(m=>[String(m.id),m])).values()];
 }
-async function lookup(g,date){
+async function lookupPair(g,date){
  let found=[],errors=[];
- for(const term of [g[0]+' '+g[1],g[0],g[1]]){
-  try{const data=await get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false');found.push(...(data.events||[]))}
-  catch(e){errors.push(e.message)}
- }
+ const terms=[g[0]+' '+g[1],g[0],g[1]];
+ const searches=await Promise.allSettled(terms.map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
+ for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||[]));else errors.push(String(r.reason))}
  const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
- if(!events.length)return {status:errors.length===3?'API: '+errors[0]:'Evento não localizado'};
+ if(!events.length)return [{status:errors.length===3?'API indisponível':'Evento não localizado'},{status:errors.length===3?'API indisponível':'Evento não localizado'}];
  const event=events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
- const candidates=markets.filter(m=>!m.slug||m.slug.includes(date)).map(m=>({m,choice:marketChoice(m,g)})).filter(x=>x.choice&&x.choice.index>=0);
- if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)',event};
- candidates.sort((a,b)=>b.choice.score-a.choice.score);
- const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
- if(best.length>1){
-  const summaries=best.map(x=>({id:x.m.id,question:x.m.question,outcomes:x.m.outcomes,slug:x.m.slug,type:x.m.sportsMarketType,selection:x.m.marketMetadata?.opticOddsSelection,index:x.choice.index}));
-  return {status:'Ambíguo: '+best.length+' contratos; IDs '+best.slice(0,4).map(x=>x.m.id).join(','),event,candidates:summaries};
+ async function quote(target){
+  const candidates=markets.filter(m=>!m.slug||m.slug.includes(date)).map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
+  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)'};
+  candidates.sort((a,b)=>b.choice.score-a.choice.score);
+  const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
+  if(best.length>1)return {status:'Ambíguo: '+best.length+' contratos',candidates:best.map(x=>({id:x.m.id,question:x.m.question,slug:x.m.slug}))};
+  const {m,choice}=best[0],token=parse(m.clobTokenIds)[choice.index];
+  if(!token)return {status:'Token CLOB ausente'};
+  try{const book=await get('https://clob.polymarket.com/book?token_id='+encodeURIComponent(token));
+   const asks=(book.asks||[]).map(x=>({price:Number(x.price),size:Number(x.size)})).filter(x=>x.price>0&&x.price<1&&x.size>0).sort((a,b)=>a.price-b.price);
+   if(!asks.length)return {status:'Sem ofertas ASK'};
+   return {status:'CLOB: ASK ('+asks[0].size+' disponíveis)',price:asks[0].price,odd:1/asks[0].price};
+  }catch(e){return {status:'CLOB: '+e.message}}
  }
- const {m,choice}=best[0],tokens=parse(m.clobTokenIds),token=tokens[choice.index];
- if(!token)return {status:'Token CLOB ausente',event};
- try{
-  const book=await get('https://clob.polymarket.com/book?token_id='+encodeURIComponent(token));
-  const asks=(book.asks||[]).map(x=>({price:Number(x.price),size:Number(x.size)})).filter(x=>x.price>0&&x.price<1&&x.size>0).sort((a,b)=>a.price-b.price);
-  if(!asks.length)return {status:'Sem ofertas ASK',event};
-  const {price,size}=asks[0];
-  return {status:'CLOB: ASK ('+size+' disponíveis)',price,odd:1/price,event,market:m};
- }catch(e){return {status:'CLOB: '+e.message,event}}
+ return Promise.all([quote(g[2]),quote(g[4])]);
 }
 function render(){
  const body=$('rows');body.replaceChildren();
@@ -125,15 +116,13 @@ function render(){
 }
 render();
 $('go').addEventListener('click',async()=>{
- $('go').disabled=true;$('csv').disabled=true;results=games.map(()=>[null,null]);render();let ok=0,date=$('date').value;
- for(let i=0;i<games.length;i++){for(let j=0;j<2;j++){
-  const g=games[i],target=j===0?g[2]:g[4];
-  $('status').textContent='Consultando '+(i*2+j+1)+'/30: '+g[0]+' × '+g[1]+' — '+target;
-  try{results[i][j]=await lookup([g[0],g[1],target],date);if(results[i][j].price)ok++}
-  catch(e){results[i][j]={status:'Erro: '+e.message}}render();
- }}
- $('status').textContent='Concluído: '+ok+'/30 cotações. Compare as alternativas e confirme regras e taxas.';
- $('count').textContent=ok+'/30 cotações';$('csv').disabled=false;$('go').disabled=false;
+ $('go').disabled=true;$('csv').disabled=true;results=games.map(()=>[null,null]);render();
+ const date=$('date').value;
+ $('status').textContent='Consultando 8 eventos em lote, reutilizando os contratos para principal e alternativa...';
+ await Promise.all(games.map(async(g,i)=>{try{results[i]=await lookupPair(g,date)}catch(e){results[i]=[{status:'Erro: '+e.message},{status:'Erro: '+e.message}]};render()}));
+ const ok=results.flat().filter(r=>r?.price).length;
+ $('status').textContent='Concluído: '+ok+'/16 cotações. Contratos ausentes permanecem em branco. Confira liquidez, regras e taxas.';
+ $('count').textContent=ok+'/16 cotações';$('csv').disabled=false;$('go').disabled=false;
 });
 $('csv').addEventListener('click',()=>{
  let data=[['Jogo','Prioridade','Mercado ADR','Força','Preço','Odd','Status','Candidatos (diagnóstico)']];
