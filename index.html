@@ -30,6 +30,8 @@ function marketChoice(m,g){
  if(/^(Over|Under)/.test(target)){
   const direction=target.startsWith('Under')?'under':'over',line=target.match(/[0-9],[0-9]/)?.[0].replace(',','.');
   if(!line)return null;
+  if(typ && typ!=='totals')return null;
+  if(/second half|2nd half|second-half|first half|1st half|first-half|spread|handicap/.test(full+' '+norm(m.slug||'')))return null;
   const lineRe=new RegExp('(^| )'+line.replace('.','[ .]')+'( |$)');
   if(!lineRe.test(full+' '+outcomes.join(' ')))return null;
   if(/team total|team goals|soccer team totals|individual|home team|away team/.test(full+' '+typ))return null;
@@ -44,6 +46,7 @@ function marketChoice(m,g){
  }
  const team=target.replace(/ 1\\+ gol$/,'');
  if(!hasTeam(q+' '+title,team))return null;
+ if(/second half|2nd half|first half|1st half/.test(full+' '+norm(m.slug||'')))return null;
  if(/both teams|match total|total match/.test(full))return null;
  if(!/team total|team goals|soccer team totals|goals scored|score at least|to score|over 0[ .]5/.test(full+' '+typ))return null;
  if(!/(0[ .]5|at least 1|1 or more|1\\+ goal|score a goal)/.test(full+' '+outcomes.join(' ')))return null;
@@ -80,7 +83,7 @@ async function lookup(g,date){
  if(!events.length)return {status:errors.length===3?'API: '+errors[0]:'Evento não localizado'};
  const event=events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
- const candidates=markets.map(m=>({m,choice:marketChoice(m,g)})).filter(x=>x.choice&&x.choice.index>=0);
+ const candidates=markets.filter(m=>!m.slug||m.slug.includes(date)).map(m=>({m,choice:marketChoice(m,g)})).filter(x=>x.choice&&x.choice.index>=0);
  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)',event};
  candidates.sort((a,b)=>b.choice.score-a.choice.score);
  const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
