@@ -57,21 +57,17 @@ function marketChoice(m,g){
   const idx=outcomes.findIndex(o=>o===direction);return idx<0?null:{index:idx,score:20};
  }
  if(/ 1\+ gol$/.test(target)){
-  const team=target.slice(0,-7);if(!hasTeam(q+' '+title,team))return null;
-  if(typ==='soccer team totals'||typ==='soccer_team_totals'||/team-total-(home|away)-/.test(m.slug||'')){
-   const side=norm(team)===norm(g[0])?'home':norm(team)===norm(g[1])?'away':null;
-   const slugSide=(m.slug||'').match(/team-total-(home|away)-/i)?.[1];
-   if(side&&slugSide&&side!==slugSide)return null;
-   const named=(q.split(':').slice(1).join(':').split('o/u')[0]||'').trim();
-   if(named&&!hasTeam(named,team))return null;
-  }
-  if(/both teams|match total|total match|spread|handicap/.test(full))return null;
-  if(!/team|score|goal/.test(full+' '+typ))return null;
-  if(!/0[ .]5|at least 1|1 or more|1 goal|score a goal/.test(full+' '+outcomes.join(' ')))return null;
-  if(/team totals|team_totals|team total/.test(typ+' '+full)){
-   const idx=outcomes.indexOf('over');if(idx>=0)return {index:idx,score:20};
-  }
-  if(outcomes.includes('yes')&&outcomes.includes('no')&&/score|goal/.test(q))return {index:outcomes.indexOf('yes'),score:15};
+  const team=target.slice(0,-7).trim();
+  const side=norm(team)===norm(g[0])?'home':norm(team)===norm(g[1])?'away':null;
+  const slugSide=(m.slug||'').match(/team-total-(home|away)-/i)?.[1];
+  if(slugSide&&side&&slugSide!==side)return null;
+  if(!/team.total|team_total|soccer_team_totals|score|goal/.test(full+' '+typ))return null;
+  if(!/0[ .]5|0pt5|at least 1|1 or more|1 goal|score a goal/.test(full+' '+outcomes.join(' ')))return null;
+  const named=(q.split(':').slice(1).join(':').split('o/u')[0]||'').trim();
+  if(named&&!hasTeam(named,team))return null;
+  if(!slugSide&&!named)return null;
+  if(outcomes.includes('over'))return {index:outcomes.indexOf('over'),score:20};
+  if(outcomes.includes('yes')&&outcomes.includes('no'))return {index:outcomes.indexOf('yes'),score:15};
  }
  return null;
 }
