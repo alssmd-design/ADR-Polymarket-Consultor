@@ -84,7 +84,10 @@ async function lookup(g,date){
  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)',event};
  candidates.sort((a,b)=>b.choice.score-a.choice.score);
  const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
- if(best.length>1)return {status:'Ambíguo: '+best.length+' contratos; IDs '+best.slice(0,4).map(x=>x.m.id).join(','),event};
+ if(best.length>1){
+  const summaries=best.map(x=>({id:x.m.id,question:x.m.question,outcomes:x.m.outcomes,slug:x.m.slug,type:x.m.sportsMarketType,selection:x.m.marketMetadata?.opticOddsSelection,index:x.choice.index}));
+  return {status:'Ambíguo: '+best.length+' contratos; IDs '+best.slice(0,4).map(x=>x.m.id).join(','),event,candidates:summaries};
+ }
  const {m,choice}=best[0],tokens=parse(m.clobTokenIds),token=tokens[choice.index];
  if(!token)return {status:'Token CLOB ausente',event};
  try{
@@ -98,5 +101,5 @@ async function lookup(g,date){
 function render(){let body=$('rows');body.replaceChildren();results.forEach((r,i)=>{let g=games[i],tr=document.createElement('tr');let cells=[i+1,g[0]+' × '+g[1],g[2],g[3].toFixed(1).replace('.',','),r?.price?(r.price*100).toFixed(1)+'¢':'—',r?.odd?r.odd.toFixed(2).replace('.',','):'—',r?.status||'Aguardando'];cells.forEach((v,j)=>{let td=document.createElement('td');td.textContent=v;if(j===6)td.className=r?.price?'ok':'warn';tr.appendChild(td)});body.appendChild(tr)})}
 render();
 $('go').addEventListener('click',async()=>{$('go').disabled=true;$('csv').disabled=true;results=games.map(()=>null);render();let ok=0,date=$('date').value;for(let i=0;i<games.length;i++){$('status').textContent='Consultando '+(i+1)+'/20: '+games[i][0]+' × '+games[i][1];try{results[i]=await lookup(games[i],date);if(results[i].price)ok++}catch(e){results[i]={status:'Erro: '+e.message}}render()}$('status').textContent='Concluído: '+ok+'/20 cotações. Se aparecer “Failed to fetch”, o navegador provavelmente bloqueou CORS; será necessário um proxy seguro.';$('count').textContent=ok+'/20 cotações';$('csv').disabled=false;$('go').disabled=false});
-$('csv').addEventListener('click',()=>{let data=[['Jogo','Mercado ADR','Força','Preço YES','Odd','Status'],...games.map((g,i)=>[g[0]+' x '+g[1],g[2],g[3],results[i]?.price||'',results[i]?.odd||'',results[i]?.status||''])];let csv='\ufeff'+data.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='adr-polymarket-odds.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});
+$('csv').addEventListener('click',()=>{let data=[['Jogo','Mercado ADR','Força','Preço YES','Odd','Status','Candidatos (diagnóstico)'],...games.map((g,i)=>[g[0]+' x '+g[1],g[2],g[3],results[i]?.price||'',results[i]?.odd||'',results[i]?.status||'',JSON.stringify(results[i]?.candidates||[])])];let csv='\ufeff'+data.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='adr-polymarket-odds.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});
 </script></body></html>
