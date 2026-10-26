@@ -74,30 +74,35 @@ async function loadMarkets(ev){
  return [...new Map(all.filter(m=>m&&m.id).map(m=>[String(m.id),m])).values()];
 }
 async function lookupPair(g,date){
- let found=[],errors=[];
- const terms=[g[0]+' '+g[1],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
- const searches=await Promise.allSettled([...new Set(terms)].map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
- for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||[]));else errors.push(String(r.reason))}
  const directSlugs={'flamengo|atletico mineiro':'bra-fla-cam-2026-10-26','copenhagen|odense':'den-kob-ode-2026-10-26','america mg|cuiaba':'bra2-afc-cui-2026-10-26'};
- const known=directSlugs[norm(g[0])+'|'+norm(g[1])];
- if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(known+suffix));if(ev&&ev.id)found.unshift(ev)}catch(e){errors.push('slug '+known+suffix+': '+e.message)}}}
- const events=[...new Map(found.filter(e=>(known&&[known,known+'-more-markets'].includes(e.slug))||matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
- if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return [{status:'Evento não localizado via slug '+(known||'indefinido')+detail+' | '+errors.slice(-2).join(' ; ')},{status:'Evento não localizado via slug '+(known||'indefinido')+detail}]}
- const event=events.find(e=>e.slug===known&&e.closed===false)||events.find(e=>e.slug===known)||events.find(e=>e.closed===false)||events[0];
+ const slug=directSlugs[norm(g[0])+'|'+norm(g[1])];
+ let found=[],errors=[];
+ if(!slug)return [{status:'Slug não configurado'},{status:'Slug não configurado'}];
+ const urls=[
+  'https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(slug),
+  'https://gamma-api.polymarket.com/events?slug='+encodeURIComponent(slug),
+  'https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(slug+'-more-markets'),
+  'https://gamma-api.polymarket.com/events?slug='+encodeURIComponent(slug+'-more-markets')
+ ];
+ const responses=await Promise.allSettled(urls.map(get));
+ responses.forEach((r,i)=>{if(r.status==='fulfilled'){for(const e of eventList(r.value))if(e&&e.id)found.push(e)}else errors.push(urls[i].split('gamma-api.polymarket.com/')[1]+': '+String(r.reason))});
+ const events=[...new Map(found.map(e=>[String(e.id),e])).values()];
+ if(!events.length){const msg='Gamma não retornou evento para '+slug+' | '+errors.join(' ; ');return [{status:msg},{status:msg}]}
+ const event=events.find(e=>e.slug===slug)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
   const candidates=markets.map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
-  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)',candidates:markets.filter(m=>/total|goal|score|both teams|btts|win|winner|moneyline/i.test([m.question,m.slug,m.sportsMarketType].join(' '))).slice(0,12).map(m=>({question:m.question,slug:m.slug,type:m.sportsMarketType}))};
+  if(!candidates.length)return {status:'Evento ID '+event.id+' encontrado; mercado ausente ('+markets.length+' contratos)',candidates:markets.filter(m=>/total|goal|score|win|winner|moneyline/i.test([m.question,m.slug,m.sportsMarketType].join(' '))).slice(0,20).map(m=>({question:m.question,slug:m.slug,type:m.sportsMarketType}))};
   candidates.sort((a,b)=>b.choice.score-a.choice.score);
   const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
   if(best.length>1)return {status:'Ambíguo: '+best.length+' contratos',candidates:best.map(x=>({id:x.m.id,question:x.m.question,slug:x.m.slug}))};
   const {m,choice}=best[0],token=parse(m.clobTokenIds)[choice.index];
-  if(!token)return {status:'Token CLOB ausente'};
+  if(!token)return {status:'Token CLOB ausente no contrato '+m.id};
   try{const book=await get('https://clob.polymarket.com/book?token_id='+encodeURIComponent(token));
    const asks=(book.asks||[]).map(x=>({price:Number(x.price),size:Number(x.size)})).filter(x=>x.price>0&&x.price<1&&x.size>0).sort((a,b)=>a.price-b.price);
-   if(!asks.length)return {status:'Sem ofertas ASK'};
-   return {status:'CLOB: ASK ('+asks[0].size+' disponíveis)',price:asks[0].price,odd:1/asks[0].price};
-  }catch(e){return {status:'CLOB: '+e.message}}
+   if(!asks.length)return {status:'Sem ofertas ASK; contrato '+m.id};
+   return {status:'CLOB: ASK ('+asks[0].size+' disponíveis) | contrato '+m.id,price:asks[0].price,odd:1/asks[0].price};
+  }catch(e){return {status:'CLOB contrato '+m.id+': '+e.message}}
  }
  return Promise.all([quote(g[2]),quote(g[4])]);
 }
