@@ -5,8 +5,8 @@
 :root{color-scheme:dark}*{box-sizing:border-box}body{background:#0a101d;color:#edf4ff;font:15px system-ui;margin:0}main{max-width:1100px;margin:auto;padding:20px}h1{font-size:26px}p,small{color:#b1c1d9}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:20px 0}label{display:grid;gap:5px}button,input{border-radius:9px;padding:12px;border:1px solid #3a4a64;background:#18283e;color:white;font:inherit}button{background:#136bd4;cursor:pointer}button:disabled{opacity:.5}.table{overflow:auto;border:1px solid #293a54;border-radius:12px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:12px 10px;text-align:left;border-bottom:1px solid #25334a}th{background:#14223a}td:nth-child(5),td:nth-child(6),td:nth-child(7){text-align:right}.ok{color:#68e5ac}.warn{color:#ffc77d}a{color:#8fc5ff}#status{padding:12px;background:#162238;border-radius:10px;white-space:pre-wrap}
 </style></head><body><main>
 <h1>ADR <span style="color:#62b5ff">× Polymarket</span></h1>
-<p>Consulta única dos 17 jogos e 34 mercados ADR. Cotação indicativa de compra (YES), sem taxas. Não realiza apostas.</p>
-<div class="controls"><label>Data dos jogos<input id="date" type="date" value="2026-10-26"></label><button id="go">Consultar 34 mercados</button><button id="csv" disabled>Exportar CSV</button></div>
+<p>Consulta de 17 jogos e 34 mercados ADR — busca ampliada e diagnóstico de contratos. Cotação indicativa de compra (YES), sem taxas. Não realiza apostas.</p>
+<div class="controls"><label>Data dos jogos<input id="date" type="date" value="2026-10-26"></label><button id="go">Consultar 34 mercados (busca ampliada)</button><button id="csv" disabled>Exportar CSV</button></div>
 <div id="status" role="status">Pronto para consultar. Esta página precisa estar hospedada em HTTPS; caso a API bloqueie CORS, os erros serão exibidos.</div>
 <p id="count">0/34 cotações</p>
 <div class="table"><table><thead><tr><th>#</th><th>Jogo</th><th>Prioridade</th><th>Mercado</th><th>Força</th><th>Preço YES</th><th>Odd</th><th>Resultado da consulta</th></tr></thead><tbody id="rows"></tbody></table></div>
@@ -173,10 +173,10 @@ function marketChoice(m,g){
  }
  if(/^(Over|Under)/.test(target)){
   const direction=target.startsWith('Under')?'under':'over',line=target.match(/[0-9],[0-9]/)?.[0].replace(',','.');
-  if(!line||typ!=='totals')return null;
+  if(!line||!/total|over.under|goals/.test(typ+' '+full))return null;
   if(!new RegExp('(^| )'+line.replace('.','[ .]')+'( |$)').test(full+' '+outcomes.join(' ')))return null;
   if(/team total|team goals|spread|handicap/.test(full))return null;
-  const idx=outcomes.findIndex(o=>o===direction);return idx<0?null:{index:idx,score:20};
+  let idx=outcomes.findIndex(o=>o===direction||o.startsWith(direction+' '));if(idx<0&&outcomes.includes('yes')&&outcomes.includes('no')&&new RegExp('\\b'+direction+'\\b').test(q))idx=outcomes.indexOf('yes');return idx<0?null:{index:idx,score:20};
  }
  if(/ 2\+ gols$/.test(target)){const team=target.replace(/ 2\+ gols$/,'');const side=norm(team)===norm(g[0])?'home':norm(team)===norm(g[1])?'away':null;const slugSide=(m.slug||'').match(/team-total-(home|away)-/i)?.[1];if(slugSide&&side&&slugSide!==side)return null;if(!/team.total|team_total|soccer_team_totals|score|goal/.test(full+' '+typ))return null;if(!/1[ .]5|1pt5|at least 2|2 or more|2 goals/.test(full+' '+outcomes.join(' ')))return null;const named=(q.split(':').slice(1).join(':').split('o/u')[0]||'').trim();if(named&&!hasTeam(named,team))return null;if(!slugSide&&!named)return null;if(outcomes.includes('over'))return {index:outcomes.indexOf('over'),score:20};if(outcomes.includes('yes')&&outcomes.includes('no'))return {index:outcomes.indexOf('yes'),score:15};}
  if(/ 1\+ gol$/.test(target)){
@@ -212,16 +212,16 @@ async function loadMarkets(ev){
 }
 async function lookupPair(g,date){
  let found=[],errors=[];
- const terms=[g[0]+' '+g[1],g[0],g[1]];
- const searches=await Promise.allSettled(terms.map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
+ const terms=[g[0]+' '+g[1],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
+ const searches=await Promise.allSettled([...new Set(terms)].map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
  for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||[]));else errors.push(String(r.reason))}
  const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
- if(!events.length)return [{status:errors.length===3?'API indisponível':'Evento não localizado'},{status:errors.length===3?'API indisponível':'Evento não localizado'}];
+ if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return [{status:(errors.length===terms.length?'API indisponível':'Evento não localizado')+detail},{status:'Evento não localizado'+detail}]}
  const event=events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
-  const candidates=markets.filter(m=>!m.slug||m.slug.includes(date)).map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
-  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)'};
+  const candidates=markets.map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
+  if(!candidates.length)return {status:'Mercado não localizado ('+markets.length+' examinados)',candidates:markets.filter(m=>/total|goal|score|both teams|btts|win|winner|moneyline/i.test([m.question,m.slug,m.sportsMarketType].join(' '))).slice(0,12).map(m=>({question:m.question,slug:m.slug,type:m.sportsMarketType}))};
   candidates.sort((a,b)=>b.choice.score-a.choice.score);
   const best=candidates.filter(x=>x.choice.score===candidates[0].choice.score);
   if(best.length>1)return {status:'Ambíguo: '+best.length+' contratos',candidates:best.map(x=>({id:x.m.id,question:x.m.question,slug:x.m.slug}))};
