@@ -78,10 +78,12 @@ async function lookupPair(g,date){
  const terms=[g[0]+' '+g[1],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
  const searches=await Promise.allSettled([...new Set(terms)].map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
  for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||[]));else errors.push(String(r.reason))}
- const knownSlugs={'flamengo|atletico mineiro':'bra-fla-cam-2026-10-26'};const known=knownSlugs[norm(g[0])+'|'+norm(g[1])];if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+known+suffix);if(ev&&ev.id)found.push(ev)}catch(e){errors.push('slug '+suffix+': '+e.message)}}}
- const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
- if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return [{status:(errors.length===terms.length?'API indisponível':'Evento não localizado')+detail},{status:'Evento não localizado'+detail}]}
- const event=events.find(e=>e.closed===false)||events[0];
+ const directSlugs={'flamengo|atletico mineiro':'bra-fla-cam-2026-10-26','copenhagen|odense':'den-kob-ode-2026-10-26','america mg|cuiaba':'bra2-afc-cui-2026-10-26'};
+ const known=directSlugs[norm(g[0])+'|'+norm(g[1])];
+ if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+encodeURIComponent(known+suffix));if(ev&&ev.id)found.unshift(ev)}catch(e){errors.push('slug '+known+suffix+': '+e.message)}}}
+ const events=[...new Map(found.filter(e=>(known&&[known,known+'-more-markets'].includes(e.slug))||matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
+ if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return [{status:'Evento não localizado via slug '+(known||'indefinido')+detail+' | '+errors.slice(-2).join(' ; ')},{status:'Evento não localizado via slug '+(known||'indefinido')+detail}]}
+ const event=events.find(e=>e.slug===known&&e.closed===false)||events.find(e=>e.slug===known)||events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
   const candidates=markets.map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
