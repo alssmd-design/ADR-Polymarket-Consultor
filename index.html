@@ -115,12 +115,12 @@ $('go').addEventListener('click',async()=>{
  await Promise.all(games.map(async(g,i)=>{try{results[i]=await lookupPair(g,date)}catch(e){results[i]=Array.from({length:3},()=>({status:'Erro: '+e.message}))};render()}));
  const ok=results.flat().filter(r=>r?.price).length;
  $('status').textContent='Concluído: '+ok+'/27 cotações. Contratos ausentes permanecem em branco. Confira liquidez, regras e taxas.';
- $('count').textContent=ok+'/6 cotações';$('csv').disabled=false;$('go').disabled=false;
+ $('count').textContent=ok+'/27 cotações';$('csv').disabled=false;$('go').disabled=false;
 });
 $('csv').addEventListener('click',()=>{
  let data=[['Jogo','Prioridade','Mercado ADR','Força','Preço','Odd','Status','Candidatos (diagnóstico)']];
- games.forEach((g,i)=>{for(let j=0;j<2;j++){const r=results[i][j]||{};data.push([g[0]+' x '+g[1],j===0?'Principal':'Alternativa',g[j===0?2:4],g[j===0?3:5],r.price??'',r.odd??'',r.status||'',JSON.stringify(r.candidates||[])])}});
+ games.forEach((g,i)=>{for(let j=0;j<3;j++){const r=results[i][j]||{};data.push([g[0]+' x '+g[1],['Principal','Segunda opção','Alternativa'][j],g[2+j*2],g[3+j*2],r.price??'',r.odd??'',r.status||'',JSON.stringify(r.candidates||[])])}});
  const csv='\ufeff'+data.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
- const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='adr-polymarket-principal-alternativa.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='adr-polymarket-2026-10-27-27-mercados.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 });
 </script></body></html>
