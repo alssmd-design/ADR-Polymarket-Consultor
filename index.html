@@ -19,7 +19,7 @@ function norm(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/
 function hasTeam(t,name){return (alias[norm(name)]||[name]).some(n=>norm(t).includes(norm(n)))}
 function parse(x){try{return typeof x==='string'?JSON.parse(x):x}catch{return []}}
 async function get(u){const r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
-function matchesEvent(e,g,date){const title=String(e.title||'');const dates=[e.eventDate,e.startTime,e.endDate,e.slug].filter(Boolean).map(String);return hasTeam(title,g[0])&&hasTeam(title,g[1])&&dates.some(d=>d.includes(date))}
+function matchesEvent(e,g,date){const title=String(e.title||e.ticker||e.slug||'');const dates=[e.eventDate,e.startTime,e.startDate,e.gameStartTime,e.endDate,e.slug].filter(Boolean).map(String);return hasTeam(title,g[0])&&hasTeam(title,g[1])&&dates.some(d=>d.includes(date))}
 function marketChoice(m,g){
  const q=norm(m.question||''), title=norm(m.groupItemTitle||''), typ=norm(m.sportsMarketType||''), slug=norm(m.slug||''), outcomes=parse(m.outcomes).map(norm),target=g[2],full=q+' '+title+' '+slug;
  const isHT=/\bHT\b/i.test(target);if(!isHT&&/first half|1st half|second half|2nd half|half time|corners|cards|shots|player/.test(full))return null;if(isHT&&!/first half|1st half|half time|halftime|1h|1st-half|first-half/.test(full+' '+typ))return null;
@@ -75,12 +75,18 @@ async function loadMarkets(ev){
 }
 async function lookupPair(g,date){
  let found=[],errors=[];
- const terms=[g[0]+' '+g[1],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
- const searches=await Promise.allSettled([...new Set(terms)].map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=30&search_profiles=false')));
- for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||[]));else errors.push(String(r.reason))}
+ const terms=[g[0]+' '+g[1],g[1]+' '+g[0],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
+ const searches=await Promise.allSettled([...new Set(terms)].flatMap(term=>['query','q'].map(param=>get('https://gamma-api.polymarket.com/public-search?'+param+'='+encodeURIComponent(term)+'&limit_per_type=50&search_profiles=false'))));
+ for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||r.value.results?.events||[]));else errors.push(String(r.reason))}
+ // Busca complementar pelos eventos oficiais da data: evita depender apenas do texto da pesquisa.
+ if(!found.some(e=>matchesEvent(e,g,date))){
+  const dates=[date+'T00:00:00Z',date+'T23:59:59Z'];
+  const pages=await Promise.allSettled([0,100,200,300,400,500].map(offset=>get('https://gamma-api.polymarket.com/events?limit=100&offset='+offset+'&start_date_min='+encodeURIComponent(dates[0])+'&start_date_max='+encodeURIComponent(dates[1]))));
+  for(const r of pages)if(r.status==='fulfilled'&&Array.isArray(r.value))found.push(...r.value);
+ }
  const knownSlugs={};const known=knownSlugs[norm(g[0])+'|'+norm(g[1])];if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+known+suffix);if(ev&&ev.id)found.push(ev)}catch(e){errors.push('slug '+suffix+': '+e.message)}}}
  const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)).map(e=>[e.id,e])).values()];
- if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title,g[0])&&hasTeam(e.title,g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return Array.from({length:3},()=>({status:(errors.length===terms.length?'API indisponível':'Evento não localizado')+detail}))}
+ if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title||e.slug||'',g[0])&&hasTeam(e.title||e.slug||'',g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return Array.from({length:3},()=>({status:(errors.length===terms.length?'API indisponível':'Evento não localizado')+detail}))}
  const event=events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
