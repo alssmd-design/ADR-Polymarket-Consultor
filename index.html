@@ -20,7 +20,13 @@ function norm(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/
 function hasTeam(t,name){return (alias[norm(name)]||[name]).some(n=>norm(t).includes(norm(n)))}
 function parse(x){try{return typeof x==='string'?JSON.parse(x):x}catch{return []}}
 async function get(u){const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),6500);let r;try{r=await fetch(u,{headers:{Accept:'application/json'},signal:ctrl.signal})}finally{clearTimeout(timer)}if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
-function matchesEvent(e,g,date){const title=[e.title,e.ticker,e.slug].filter(Boolean).join(' ');const dates=[e.eventDate,e.startTime,e.startDate,e.gameStartTime,e.slug].filter(Boolean).map(String);return hasTeam(title,g[0])&&hasTeam(title,g[1])&&dates.some(d=>d.includes(date))}
+function eventDate(e){return [e.eventDate,e.gameStartTime,e.startTime,e.startDate,e.endDate,e.slug].filter(Boolean).map(String)}
+function matchesEvent(e,g,date){
+ const title=[e.title,e.ticker,e.slug,e.description].filter(Boolean).join(' ');
+ if(!hasTeam(title,g[0])||!hasTeam(title,g[1]))return false;
+ const ds=eventDate(e);return ds.some(d=>d.includes(date)||d.includes(date.replaceAll('-','')));
+}
+function pairEvent(e,g){const title=[e.title,e.ticker,e.slug,e.description].filter(Boolean).join(' ');return hasTeam(title,g[0])&&hasTeam(title,g[1])}
 function marketChoice(m,g){
  const q=norm(m.question||''), title=norm(m.groupItemTitle||''), typ=norm(m.sportsMarketType||''), slug=norm(m.slug||''), outcomes=parse(m.outcomes).map(norm),target=g[2],full=q+' '+title+' '+slug;
  const isHT=/\bHT\b/i.test(target);if(!isHT&&/first half|1st half|second half|2nd half|half time|corners|cards|shots|player/.test(full))return null;if(isHT&&!/first half|1st half|half time|halftime|1h|1st-half|first-half/.test(full+' '+typ))return null;
@@ -76,19 +82,28 @@ async function loadMarkets(ev){
 }
 async function lookupPair(g,date){
  let found=[],errors=[];
- const terms=[g[0]+' '+g[1],g[1]+' '+g[0],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
- const searches=await Promise.allSettled([...new Set(terms)].slice(0,3).map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=50&search_profiles=false')));
+ const teamTerms=[g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
+ const terms=[g[0]+' '+g[1],g[1]+' '+g[0],...teamTerms];
+ const unique=[...new Set(terms.map(x=>x.trim()).filter(Boolean))];
+ // Pesquisa por cada equipe separadamente, pois a busca conjunta pode falhar.
+ const searches=await Promise.allSettled(unique.slice(0,8).map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=100&search_profiles=false')));
  for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||r.value.results?.events||[]));else errors.push(String(r.reason))}
- // Busca complementar pelos eventos oficiais da data: evita depender apenas do texto da pesquisa.
- if(!found.some(e=>matchesEvent(e,g,date))){
-  const dates=[date+'T00:00:00Z',date+'T23:59:59Z'];
-  const pages=await Promise.allSettled([0,100].map(offset=>get('https://gamma-api.polymarket.com/events?limit=100&offset='+offset+'&start_date_min='+encodeURIComponent(dates[0])+'&start_date_max='+encodeURIComponent(dates[1]))));
-  for(const r of pages)if(r.status==='fulfilled'&&Array.isArray(r.value))found.push(...r.value);
+ let pairs=[...new Map(found.filter(e=>pairEvent(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
+ // Busca de calendário em janelas UTC adjacentes para lidar com fuso horário.
+ if(!pairs.some(e=>matchesEvent(e,g,date))){
+  const day=new Date(date+'T00:00:00Z'),before=new Date(day.getTime()-86400000).toISOString(),after=new Date(day.getTime()+2*86400000).toISOString();
+  const pages=await Promise.allSettled([0,100,200,300,400,500].map(offset=>get('https://gamma-api.polymarket.com/events?limit=100&offset='+offset+'&start_date_min='+encodeURIComponent(before)+'&start_date_max='+encodeURIComponent(after))));
+  for(const r of pages){if(r.status==='fulfilled'&&Array.isArray(r.value))found.push(...r.value);else if(r.status==='rejected')errors.push(String(r.reason))}
+  pairs=[...new Map(found.filter(e=>pairEvent(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
  }
- const knownSlugs={};const known=knownSlugs[norm(g[0])+'|'+norm(g[1])];if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+known+suffix);if(ev&&ev.id)found.push(ev)}catch(e){errors.push('slug '+suffix+': '+e.message)}}}
- const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)||(known&&String(e.slug||'').startsWith(known))).map(e=>[e.id,e])).values()];
- if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title||e.slug||'',g[0])&&hasTeam(e.title||e.slug||'',g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return Array.from({length:(g.length-2)/2},()=>({status:(errors.length>=Math.min(8,new Set(terms).size)?'API indisponível':'Evento não localizado na data — confirmar calendário')+detail}))}
- const event=events.find(e=>String(e.slug||'')===known)||events.find(e=>e.closed===false)||events[0];
+ const exact=pairs.filter(e=>matchesEvent(e,g,date));
+ const nearby=pairs.filter(e=>eventDate(e).some(d=>{const dt=d.match(/20\\d{2}-\\d{2}-\\d{2}/)?.[0];return dt&&Math.abs(Date.parse(dt+'T00:00:00Z')-Date.parse(date+'T00:00:00Z'))<=86400000}));
+ const events=exact.length?exact:nearby;
+ if(!events.length){
+  const detail=pairs.length?' | Confrontos similares: '+pairs.slice(0,4).map(e=>String(e.title)+' ['+eventDate(e)[0]+']').join('; '):'';
+  return Array.from({length:(g.length-2)/2},()=>({status:(errors.length===unique.slice(0,8).length?'Falha na API':'Evento não confirmado para a data')+detail}));
+ }
+ const event=events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
   const candidates=markets.map(m=>({m,choice:marketChoice(m,[g[0],g[1],target])})).filter(x=>x.choice&&x.choice.index>=0);
