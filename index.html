@@ -75,10 +75,10 @@ async function loadMarkets(ev){
  return [...new Map(all.filter(m=>m&&m.id).map(m=>[String(m.id),m])).values()];
 }
 async function lookupPair(g,date){
- let found=[],errors=[];
+ let found=[],errors=[];let searchResponses=0;let searchEvents=0;
  const terms=[g[0]+' '+g[1],g[1]+' '+g[0],g[0],g[1],...(alias[norm(g[0])]||[]),...(alias[norm(g[1])]||[])];
  const searches=await Promise.allSettled([...new Set(terms)].slice(0,8).map(term=>get('https://gamma-api.polymarket.com/public-search?q='+encodeURIComponent(term)+'&limit_per_type=50&search_profiles=false')));
- for(const r of searches){if(r.status==='fulfilled')found.push(...(r.value.events||r.value.results?.events||[]));else errors.push(String(r.reason))}
+ for(const r of searches){if(r.status==='fulfilled'){searchResponses++;const evs=r.value.events||r.value.results?.events||[];searchEvents+=evs.length;found.push(...evs)}else errors.push(String(r.reason))}
  // Busca complementar pelos eventos oficiais da data: evita depender apenas do texto da pesquisa.
  if(!found.some(e=>matchesEvent(e,g,date))){
   const dates=[date+'T00:00:00Z',date+'T23:59:59Z'];
@@ -87,7 +87,7 @@ async function lookupPair(g,date){
  }
  const knownSlugs={};const known=knownSlugs[norm(g[0])+'|'+norm(g[1])];if(known){for(const suffix of ['', '-more-markets']){try{const ev=await get('https://gamma-api.polymarket.com/events/slug/'+known+suffix);if(ev&&ev.id)found.push(ev)}catch(e){errors.push('slug '+suffix+': '+e.message)}}}
  const events=[...new Map(found.filter(e=>matchesEvent(e,g,date)||(known&&String(e.slug||'').startsWith(known))).map(e=>[e.id,e])).values()];
- if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title||e.slug||'',g[0])&&hasTeam(e.title||e.slug||'',g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';return Array.from({length:(g.length-2)/2},()=>({status:(errors.length>=Math.min(8,new Set(terms).size)?'API indisponível':'Evento não localizado na data — confirmar calendário')+detail}))}
+ if(!events.length){const related=[...new Map(found.filter(e=>hasTeam(e.title||e.slug||'',g[0])&&hasTeam(e.title||e.slug||'',g[1])).map(e=>[e.id,e])).values()].slice(0,4);const detail=related.length?' | Eventos similares: '+related.map(e=>String(e.title)+' ['+String(e.eventDate||e.startTime||'sem data').slice(0,10)+']').join('; '):'';const diagnostic=' | buscas OK: '+searchResponses+' | eventos da busca: '+searchEvents+' | candidatos totais: '+found.length+' | falhas: '+errors.length+' | exemplos: '+found.slice(0,3).map(e=>String(e.title||e.slug||'sem título').slice(0,65)).join(' / ');return Array.from({length:(g.length-2)/2},()=>({status:(errors.length>=Math.min(8,new Set(terms).size)?'API indisponível':'Evento não localizado na data — confirmar calendário')+detail+diagnostic}))}
  const event=events.find(e=>String(e.slug||'')===known)||events.find(e=>e.closed===false)||events[0];
  const markets=await loadMarkets(event);
  async function quote(target){
