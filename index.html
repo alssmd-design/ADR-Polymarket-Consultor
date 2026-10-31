@@ -20,6 +20,11 @@ function both(e,g){const s=eventText(e);return teamFound(s,g.codes[0])&&teamFoun
 function eventDates(e){return [e.eventDate,e.gameStartTime,e.startTime,e.startDate,e.slug].filter(Boolean).map(String)}
 function dateDistance(e,date){const target=Date.parse(date+"T12:00:00Z");const ds=eventDates(e).flatMap(x=>[...x.matchAll(/20\d{2}[-/]\d{2}[-/]\d{2}/g)].map(m=>Date.parse(m[0].replaceAll("/","-")+"T12:00:00Z"))).filter(Number.isFinite);return ds.length?Math.min(...ds.map(v=>Math.abs(v-target)/86400000)):999}
 async function discover(g,date){
+ if(g.home==="Botafogo-SP"&&g.away==="Sport Recife"&&date==="2026-10-31"){
+  const slug="bra2-bot-rec-2026-10-31";
+  for(const candidate of [slug,slug+"-more-markets"]){try{const ev=await api("https://gamma-api.polymarket.com/events/slug/"+candidate);if(ev&&ev.id){logs.push("Botafogo-SP: evento encontrado por slug oficial "+candidate+" ID "+ev.id);return ev}}catch(e){logs.push("Botafogo-SP: slug "+candidate+" → "+String(e))}}
+ }
+
  const terms=[g.codes[0]+" "+g.codes[1],g.codes[0],g.codes[1],g.home,g.away];
  const out=await Promise.allSettled([...new Set(terms)].map(t=>api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(t)+"&limit_per_type=100&search_profiles=false")));
  let found=[];out.forEach((r,i)=>{if(r.status==="fulfilled"){const ev=eventsOf(r.value);found.push(...ev);logs.push(g.home+": busca "+terms[i]+" → "+ev.length+" eventos")}else logs.push(g.home+": busca "+terms[i]+" → "+String(r.reason))});
