@@ -45,26 +45,27 @@ const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=n
 const ht=/ HT$/.test(target),first=/first half|1st half|half time|halftime|1h|1st half|1st period|1st-half|first period|half 1/.test(full);
 if(ht&&!first)return null;if(!ht&&first)return null;
 if(target==="BTTS Sim"){
- if(/first half|1st half|halftime|half time|corners?|cards?|player|shots?|team total|team goals/.test(full))return null;
+ if(/first half|1st half|halftime|half time|corners?|cards?|player|shots?|team total|team goals|first team|second team/.test(full))return null;
  if(!/both teams to score|both teams score|btts|both team score/.test(full))return null;
  const ix=out.findIndex(x=>x==="yes"||x==="both teams to score"||x==="both");
  return ix>=0?ix:null;
 }
-if(/ 2\\+ gols$/.test(target)){
- const homeTarget=target.startsWith("Viking")||target.startsWith("PSV");
- const code=homeTarget?g.codes[0]:g.codes[1];
- if(!homeTarget)return null;
- if(/first half|1st half|half time|halftime|corners?|cards?|player|shots?|handicap|asian|second half/.test(full))return null;
- const teamMarker=/team total|team goals|team to score|team score|goals by|goals scored|total goals by/.test(full);
- const sideSlug=/(?:team[- ]total|team[- ]goals)[- ](home|away)/.exec(full)?.[1];
+if(/ 2\+ gols$/.test(target)){
+ const code=g.codes[0];
+ if(!target.startsWith(g.home.split(" ")[0]))return null;
+ if(/first half|1st half|half time|halftime|corners?|cards?|player|shots?|handicap|asian|second half|both teams/.test(full))return null;
+ const teamMarker=/team total|team goals|team to score|team score|goals by|goals scored|total goals by|to score 2|score 2|2 or more goals|at least 2 goals/.test(full);
+ const sideSlug=/(?:team total|team goals) (home|away)/.exec(full)?.[1];
  const named=aliasFound(q,code)||aliasFound(slug,code);
  if(!teamMarker&&!named)return null;
  if(sideSlug&&sideSlug!=="home")return null;
  if(!sideSlug&&!named)return null;
- const isLine=/\\b1[ .]5\\b|\\b2\\+\\b|\\bat least 2\\b|\\b2 or more\\b|\\b2 goals\\b/.test(full);
- if(!isLine||/\\b2[ .]5\\b|\\b3[ .]5\\b/.test(full))return null;
+ const line15=/(?:^| )1 5(?: |$)/.test(full);
+ const exact2=/(?:^| )2(?: |$)(?:or more|goals)|2 or more|at least 2|score 2|2 goals|2 plus|2\+/.test(full);
+ if(!line15&&!exact2)return null;
+ if(/(?:^| )[23] 5(?: |$)/.test(full))return null;
  if(over>=0)return over;
- if(yes>=0&&/2\\+|at least 2|2 or more|score 2/.test(full))return yes;
+ if(yes>=0&&exact2)return yes;
  return null;
 }
 if(/ ML$/.test(target)){
@@ -99,7 +100,18 @@ async function run(focused=false){const date=$("date").value;$("run").disabled=t
  const uniq=[...new Map(matches.map(x=>[String(x.m.id)+":"+x.idx,x])).values()];
  // Eventos podem trazer linhas de gols idênticas em mercados duplicados.
  // Nunca escolher arbitrariamente: mostrar contratos e seus IDs para auditoria.
- if(uniq.length>1){r.status="Ambíguo: "+uniq.length+" contratos; veja diagnóstico";logs.push(g.home+" "+r.market+": "+uniq.slice(0,12).map(x=>"ID="+x.m.id+" | "+x.m.question+" | slug="+x.m.slug+" | type="+x.m.sportsMarketType+" | group="+x.m.groupItemTitle).join(" || "));continue}
+ if(uniq.length>1){
+ const strict=uniq.filter(x=>{
+  const m=x.m,full=norm([m.question,m.slug,m.sportsMarketType,m.groupItemTitle].join(" "));
+  if(r.market!=="BTTS Sim")return false;
+  if(/first half|1st half|half time|halftime|2nd half|second half|first 10|first 15|first 30/.test(full))return false;
+  if(/corners?|cards?|player|shots?|team total|team goals/.test(full))return false;
+  return true;
+ });
+ // Não inferir o contrato se houver mais de um candidato FT distinto.
+ if(strict.length===1){matches.splice(0,matches.length,strict[0]);logs.push(g.home+" "+r.market+": escolhido contrato FT inequívoco ID "+strict[0].m.id)}
+ else {r.status="Ambíguo: "+uniq.length+" contratos; veja diagnóstico";logs.push(g.home+" "+r.market+": "+uniq.slice(0,12).map(x=>"ID="+x.m.id+" | "+x.m.question+" | slug="+x.m.slug+" | type="+x.m.sportsMarketType+" | group="+x.m.groupItemTitle).join(" || "));continue}
+}
  matches.splice(1)
 }Object.assign(r,await quote(matches[0].m,matches[0].idx))}render()}catch(e){logs.push(g.home+": erro "+String(e));own.forEach(r=>r.status="Erro: "+String(e));render()}}$("status").textContent="Consulta concluída: "+rows.filter(r=>r.odd!=null).length+" de "+rows.length+" mercados com preço. Consulte o diagnóstico.";$("run").disabled=false;$("focus").disabled=false;$("export").disabled=false}
 $("run").addEventListener("click",()=>run(false));$("focus").addEventListener("click",()=>run(true));$("export").addEventListener("click",()=>{const data=[["Confronto","Mercado","Força","Preço","Odd","Status"],...rows.map(r=>[r.game,r.market,r.score,r.price??"",r.odd??"",r.status])];const csv="\ufeff"+data.map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(";")).join("\r\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="ADR-mercados-alternativos-"+$("date").value+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});rows=games.flatMap(g=>g.markets.map(([market,score])=>({game:g.home+" × "+g.away,market,score,status:"Aguardando"})));render();
