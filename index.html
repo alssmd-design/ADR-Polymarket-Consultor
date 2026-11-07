@@ -21,12 +21,12 @@ function dist(e,d){const target=Date.parse(d+"T12:00:00Z");const ds=dates(e).fla
 function candidates(data){const v=Array.isArray(data)?data:(data?.events||data?.results?.events||data?.data?.events||[]);return Array.isArray(v)?v:[]}
 async function search(term){const key=norm(term);if(!eventsCache.has(key))eventsCache.set(key,api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false").then(candidates));return eventsCache.get(key)}
 async function findEvent(g,date){
- const q=[g.home+" "+g.away,g.home,g.away];
+ const q=[g.home+" "+g.away,g.home,g.away,...(aliases[g.home]||[]).slice(0,2),...(aliases[g.away]||[]).slice(0,2)];
  const found=(await Promise.allSettled(q.map(search))).flatMap((r,i)=>{if(r.status==="fulfilled"){log(g.home+": busca "+q[i]+" retornou "+r.value.length+" eventos");return r.value}log(g.home+": busca "+q[i]+" falhou "+String(r.reason));return []});
  let matched=[...new Map(found.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
  if(!matched.length){
   const min=new Date(Date.parse(date+"T00:00:00Z")-86400000).toISOString(),max=new Date(Date.parse(date+"T00:00:00Z")+2*86400000).toISOString();
-  const urls=[0,250].map(offset=>"https://gamma-api.polymarket.com/events?limit=250&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max));
+  const urls=[0,250,500].map(offset=>"https://gamma-api.polymarket.com/events?limit=250&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max));
   const extras=await Promise.allSettled(urls.map(u=>api(u,7000)));
   const pool=extras.flatMap((r,i)=>{if(r.status==="fulfilled"){const arr=candidates(r.value);log(g.home+": calendário "+i+" retornou "+arr.length);return arr}log(g.home+": calendário "+i+" falhou "+String(r.reason));return []});
   matched=[...new Map(pool.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
@@ -39,11 +39,11 @@ async function findEvent(g,date){
 }
 async function markets(e){
  let all=[...(e.markets||[])];
- const sources=[];
- if(e.slug)sources.push(["evento por slug",api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug))]);
- if(e.id)sources.push(["contratos por evento",api("https://gamma-api.polymarket.com/markets?event_id="+encodeURIComponent(e.id)+"&limit=100")]);
- const result=await Promise.allSettled(sources.map(x=>x[1]));
- result.forEach((r,i)=>{if(r.status==="fulfilled"){const d=r.value,ms=Array.isArray(d)?d:(d?.markets||[]);all.push(...ms);log((e.slug||e.id)+" "+sources[i][0]+": "+ms.length+" contratos")}else log((e.slug||e.id)+" "+sources[i][0]+": "+String(r.reason))});
+ if(e.slug){
+  const slugs=[e.slug,e.slug+"-more-markets"];
+  const results=await Promise.allSettled(slugs.map(slug=>api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(slug),7500)));
+  results.forEach((r,i)=>{if(r.status==="fulfilled"){const ms=r.value?.markets||[];all.push(...ms);log(e.slug+": "+slugs[i]+" => "+ms.length+" contratos")}else log(e.slug+": "+slugs[i]+" falhou: "+String(r.reason))});
+ }
  return [...new Map(all.filter(m=>m?.id).map(m=>[String(m.id),m])).values()];
 }
 function choose(m,g,target){
