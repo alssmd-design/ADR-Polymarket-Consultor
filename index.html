@@ -10,37 +10,71 @@ games.forEach(g=>{if(g.home==="Athletico")g.codes=["CA Paranaense","CR Vasco da 
 const $=id=>document.getElementById(id),norm=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(),parse=x=>{try{return typeof x==="string"?JSON.parse(x):x}catch{return []}};
 let rows=[],logs=[];
 async function api(url){const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),12000);try{const res=await fetch(url,{signal:ctl.signal});if(!res.ok)throw Error("HTTP "+res.status);return await res.json()}finally{clearTimeout(timer)}}
-function eventsOf(data){return Array.isArray(data)?data:(data?.events||data?.results?.events||[])}
-function eventText(e){return norm([e.title,e.ticker,e.slug].join(" "))}
-function teamFound(s,team){const n=norm(team);if(n==="sport")return s.includes("sport ")&&!s.includes("sporting");const words=n.split(" ");return words.every(w=>w.length<3?new RegExp("(^| )"+w+"( |$)").test(s):s.includes(w))}
+function eventsOf(data){
+ if(Array.isArray(data))return data;
+ const raw=[data?.events,data?.results?.events,data?.data?.events,data?.results,data?.data].filter(Array.isArray);
+ return raw.flatMap(a=>a.flatMap(x=>x?.events&&Array.isArray(x.events)?x.events:[x])).filter(x=>x&&typeof x==="object");
+}
+function eventText(e){return norm([e.title,e.ticker,e.slug,e.description,e.homeTeam,e.awayTeam,e.teams?.join?.(" ")].filter(Boolean).join(" "))}
+const stopWords=new Set(["fc","cf","sc","ac","afc","club","city","united","de","da","do","y","the","football","sporting","sports","fk","bk","sv","as","rc","cd"]);
+function teamFound(s,team){
+ const n=norm(team);if(!n)return false;
+ if(new RegExp("(^| )"+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"( |$)").test(s))return true;
+ const tokens=n.split(" ").filter(w=>w.length>=4&&!stopWords.has(w));
+ if(!tokens.length)return false;
+ return tokens.every(w=>new RegExp("(^| )"+w+"( |$)").test(s));
+}
 function aliasFound(s,team){return (aliases[team]||[team]).some(t=>teamFound(s,t))}
 function both(e,g){const s=eventText(e);return aliasFound(s,g.codes[0])&&aliasFound(s,g.codes[1])}
-function eventDates(e){return [e.eventDate,e.gameStartTime,e.startTime,e.startDate,e.slug].filter(Boolean).map(String)}
-function dateDistance(e,date){const target=Date.parse(date+"T12:00:00Z");const ds=eventDates(e).flatMap(x=>[...x.matchAll(/20\d{2}[-/]\d{2}[-/]\d{2}/g)].map(m=>Date.parse(m[0].replaceAll("/","-")+"T12:00:00Z"))).filter(Number.isFinite);return ds.length?Math.min(...ds.map(v=>Math.abs(v-target)/86400000)):999}
+function eventDates(e){return [e.eventDate,e.gameStartTime,e.startTime,e.startDate,e.start_date,e.endDate,e.slug].filter(Boolean).map(String)}
+function dateDistance(e,date){
+ const target=Date.parse(date+"T12:00:00Z");
+ const ds=eventDates(e).flatMap(x=>[...x.matchAll(/20\\d{2}[-/]\\d{2}[-/]\\d{2}/g)].map(m=>Date.parse(m[0].replaceAll("/","-")+"T12:00:00Z"))).filter(Number.isFinite);
+ return ds.length?Math.min(...ds.map(v=>Math.abs(v-target)/86400000)):999;
+}
+const discoveryCache=new Map();
 async function discover(g,date){
- const dateKey=date.replaceAll("-","");
- const slugCandidates=[];
- let found=[];
- const slugResults=await Promise.allSettled(slugCandidates.map(s=>api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(s))));
- slugResults.forEach((r,i)=>{if(r.status==="fulfilled"&&r.value?.id){found.push(r.value);logs.push(g.home+": slug "+slugCandidates[i]+" → "+r.value.id)}});
- const terms=[g.codes[0]+" "+g.codes[1],g.codes[1]+" "+g.codes[0],...(aliases[g.codes[0]]||[g.codes[0]]),...(aliases[g.codes[1]]||[g.codes[1]])];
- const unique=[...new Set(terms)];
- const out=await Promise.allSettled(unique.map(t=>api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(t)+"&limit_per_type=100&search_profiles=false")));
- out.forEach((r,i)=>{if(r.status==="fulfilled"){const ev=eventsOf(r.value);found.push(...ev);logs.push(g.home+": busca "+unique[i]+" → "+ev.length+" eventos")}else logs.push(g.home+": busca "+unique[i]+" → "+String(r.reason))});
+ const cacheKey=g.home+"|"+g.away+"|"+date;if(discoveryCache.has(cacheKey))return discoveryCache.get(cacheKey);
+ const base="https://gamma-api.polymarket.com";
+ const terms=[g.home+" "+g.away,g.away+" "+g.home,g.home,g.away,
+  ...(aliases[g.home]||[]).slice(0,2),...(aliases[g.away]||[]).slice(0,2)];
+ const unique=[...new Set(terms)].filter(Boolean);
+ let found=[],errors=[];
+ // A pesquisa pública frequentemente omite eventos encerrados ou devolve resultados paginados.
+ // Consultar termos individuais, incluindo eventos inativos, e só aceitar nomes+data.
+ for(const term of unique){
+  try{
+   const data=await api(base+"/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false&keep_closed_markets=1");
+   const ev=eventsOf(data);found.push(...ev);
+   logs.push(g.home+": busca '"+term+"' => "+ev.length+" eventos");
+  }catch(e){errors.push(term+": "+String(e))}
+ }
  let matched=found.filter(e=>both(e,g));
  if(!matched.length){
-   const d0=new Date(date+"T00:00:00Z"),min=new Date(d0.getTime()-2*86400000).toISOString(),max=new Date(d0.getTime()+3*86400000).toISOString();
-   const offsets=[0,100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900];
-   const results=await Promise.allSettled(offsets.map(offset=>api("https://gamma-api.polymarket.com/events?limit=100&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max))));
-   results.forEach((r,i)=>{if(r.status==="fulfilled"){const ev=eventsOf(r.value);found.push(...ev);logs.push(g.home+": calendário offset "+offsets[i]+" → "+ev.length)}else logs.push(g.home+": calendário "+offsets[i]+" erro "+String(r.reason))});
-   matched=found.filter(e=>both(e,g));
+  // Calendário de eventos: varrer por início da partida e não por encerramento de mercado.
+  const d0=new Date(date+"T00:00:00Z");
+  const min=new Date(d0.getTime()-86400000).toISOString();
+  const max=new Date(d0.getTime()+2*86400000).toISOString();
+  for(const endpoint of [
+   "/events?limit=500&offset=0&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
+   "/events?limit=500&offset=500&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
+   "/events?limit=500&offset=1000&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
+   "/events?limit=500&offset=0&end_date_min="+encodeURIComponent(min)+"&end_date_max="+encodeURIComponent(max),
+   "/events?limit=500&offset=500&end_date_min="+encodeURIComponent(min)+"&end_date_max="+encodeURIComponent(max)
+  ]){
+   try{const ev=eventsOf(await api(base+endpoint));found.push(...ev);logs.push(g.home+": calendário "+endpoint.slice(0,35)+" => "+ev.length);if(ev.some(e=>both(e,g)))break}
+   catch(e){errors.push(endpoint.slice(0,25)+": "+String(e))}
+  }
+  matched=found.filter(e=>both(e,g));
  }
- matched=[...new Map(matched.map(e=>[String(e.id||e.slug),e])).values()].sort((a,b)=>dateDistance(a,date)-dateDistance(b,date));
- logs.push(g.home+": "+found.length+" eventos recebidos; "+matched.length+" confrontos correspondentes");
- const valid=matched.filter(e=>dateDistance(e,date)<=1&&e.closed!==true);
- if(!valid.length){logs.push(g.home+": NÃO LOCALIZADO (não foi possível confirmar evento na Gamma internacional). Próximos resultados: "+matched.slice(0,8).map(e=>(e.title||e.slug)+" [slug "+e.slug+"; data "+eventDates(e).join(",")+"]").join(" | "));return null}
- const selected=valid.find(e=>e.active===true)||valid[0];
- logs.push(g.home+": evento confirmado por nomes e data: "+selected.id+" / "+selected.slug);
+ const dedup=[...new Map(matched.map(e=>[String(e.id||e.slug),e])).values()];
+ const valid=dedup.filter(e=>dateDistance(e,date)<=1&&e.closed!==true);
+ valid.sort((a,b)=>dateDistance(a,date)-dateDistance(b,date));
+ const selected=valid.find(e=>e.active===true)||valid[0]||null;
+ logs.push(g.home+": recebidos "+found.length+", confronto "+dedup.length+", válidos "+valid.length);
+ if(!selected)logs.push(g.home+": sem evento verificável. Correspondências: "+dedup.slice(0,5).map(e=>(e.title||e.slug)+" / "+eventDates(e).join(",")).join(" | ")+"; erros: "+errors.slice(0,4).join(" | "));
+ else logs.push(g.home+": confirmado "+selected.title+" | "+selected.slug+" | "+eventDates(selected).join(","));
+ discoveryCache.set(cacheKey,selected);
  return selected;
 }
 async function marketsFor(e){let all=[...(e.markets||[])];const urls=[];if(e.id)for(const offset of [0,100,200])urls.push("https://gamma-api.polymarket.com/markets?event_id="+e.id+"&limit=100&offset="+offset);if(e.slug){urls.push("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug));urls.push("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug+"-more-markets"))}
