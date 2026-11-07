@@ -8,7 +8,7 @@ const norm=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLo
 const parse=x=>{if(Array.isArray(x))return x;try{return JSON.parse(x||"[]")}catch{return []}};
 let rows=[],logs=[],eventsCache=new Map();
 const log=x=>{logs.push(x);$("debug").textContent=logs.join("\n")};
-async function api(url,timeout=8500){const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),timeout);try{const r=await fetch(url,{signal:ctl.signal,cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(timer)}}
+async function api(url,timeout=8500){const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}
 function words(s){return norm(s).split(" ").filter(x=>x.length>2&&!["city","club","football","united","sporting","sport","real","saint","santa","fc","cf","sc"].includes(x))}
 function names(t){return [t,...(aliases[t]||[])].map(norm).filter(Boolean)}
 function isTeam(text,t){const s=" "+norm(text)+" ";return names(t).some(n=>s.includes(" "+n+" ")||words(n).some(w=>w.length>=5&&s.includes(" "+w+" ")))}
@@ -21,12 +21,12 @@ function dist(e,d){const target=Date.parse(d+"T12:00:00Z");const ds=dates(e).fla
 function candidates(data){const v=Array.isArray(data)?data:(data?.events||data?.results?.events||data?.data?.events||[]);return Array.isArray(v)?v:[]}
 async function search(term){const key=norm(term);if(!eventsCache.has(key))eventsCache.set(key,api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false").then(candidates));return eventsCache.get(key)}
 async function findEvent(g,date){
- const q=[g.home+" "+g.away,g.home,g.away,...(aliases[g.home]||[]).slice(0,2),...(aliases[g.away]||[]).slice(0,2)];
+ const q=[g.home+" "+g.away,g.home];
  const found=(await Promise.allSettled(q.map(search))).flatMap((r,i)=>{if(r.status==="fulfilled"){log(g.home+": busca "+q[i]+" retornou "+r.value.length+" eventos");return r.value}log(g.home+": busca "+q[i]+" falhou "+String(r.reason));return []});
  let matched=[...new Map(found.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
  if(!matched.length){
   const min=new Date(Date.parse(date+"T00:00:00Z")-86400000).toISOString(),max=new Date(Date.parse(date+"T00:00:00Z")+2*86400000).toISOString();
-  const urls=[0,250,500].map(offset=>"https://gamma-api.polymarket.com/events?limit=250&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max));
+  const urls=[0].map(offset=>"https://gamma-api.polymarket.com/events?limit=250&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max));
   const extras=await Promise.allSettled(urls.map(u=>api(u,7000)));
   const pool=extras.flatMap((r,i)=>{if(r.status==="fulfilled"){const arr=candidates(r.value);log(g.home+": calendário "+i+" retornou "+arr.length);return arr}log(g.home+": calendário "+i+" falhou "+String(r.reason));return []});
   matched=[...new Map(pool.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
@@ -65,7 +65,7 @@ async function discoverOver(g,date){
  const base=await findEvent(g,date);
  if(base)return base;
  // Alguns totais aparecem como evento separado: procurar por ambos os times.
- const terms=[g.home+" "+g.away+" over",g.home+" "+g.away+" goals",g.home,g.away];
+ const terms=[g.away];
  const rs=await Promise.allSettled(terms.map(search));
  const pool=rs.flatMap((r,i)=>{if(r.status==="fulfilled")return r.value;log(g.home+" busca over "+terms[i]+": "+String(r.reason));return []});
  const match=pool.filter(e=>eventMatch(e,g)&&(dist(e,date)<=1||dist(e,date)===999));
@@ -91,7 +91,7 @@ async function processGame(g,date){
  const own=rows.filter(r=>r.game===g.home+" × "+g.away);
  try{
   const e=await discoverOver(g,date);
-  if(!e){own.forEach(r=>r.status="Evento não localizado");render();return}
+  if(!e){own.forEach(r=>r.status=logs.some(x=>x.includes("falhou"))?"Falha na API / conexão — veja relatório":"Evento não localizado");render();return}
   const ms=await markets(e);
   for(const r of own){
    const found=ms.map(m=>({m,idx:choose(m,g,r.market)})).filter(x=>x.idx!==null);
@@ -107,7 +107,7 @@ async function run(){
  eventsCache.clear();
  rows=games.flatMap(g=>g.markets.map(([market])=>({game:g.home+" × "+g.away,market,status:"Aguardando"})));
  render();const date=$("date").value;
- for(let i=0;i<games.length;i+=5){$("status").textContent="Consultando "+Math.min(i+5,games.length)+"/"+games.length+" jogos...";await Promise.all(games.slice(i,i+5).map(g=>processGame(g,date)))}
+ for(let i=0;i<games.length;i+=2){$("status").textContent="Consultando "+Math.min(i+2,games.length)+"/"+games.length+" jogos...";await Promise.all(games.slice(i,i+2).map(g=>processGame(g,date)))}
  $("status").textContent="Concluído: "+rows.filter(x=>x.odd!=null).length+"/"+rows.length+" preços. Baixe o relatório de erros abaixo se houver ausências.";
  $("run").disabled=false;$("export").disabled=false;
 }
