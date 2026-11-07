@@ -15,7 +15,7 @@ function eventMatch(e,g){
  const text=[e.title,e.slug,e.ticker,e.homeTeam,e.awayTeam,e.description].filter(Boolean).join(" ");
  return isTeam(text,g.home)&&isTeam(text,g.away);
 }
-function dates(e){return [e.gameStartTime,e.eventDate,e.startTime,e.startDate,e.endDate,e.slug].filter(Boolean).map(String)}
+function dates(e){return [e.gameStartTime,e.eventDate,e.startTime,e.startDate,e.start_date,e.endDate,e.slug].filter(Boolean).map(String)}
 function dist(e,d){const target=Date.parse(d+"T12:00:00Z");const ds=dates(e).flatMap(x=>[...x.matchAll(/20\d{2}[-/]\d{2}[-/]\d{2}/g)].map(z=>Date.parse(z[0].replaceAll("/","-")+"T12:00:00Z"))).filter(Number.isFinite);return ds.length?Math.min(...ds.map(x=>Math.abs(x-target)/86400000)):999}
 function candidates(data){return Array.isArray(data)?data:(data?.events||data?.results?.events||[])}
 async function search(term){const key=norm(term);if(!eventsCache.has(key))eventsCache.set(key,api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false").then(candidates));return eventsCache.get(key)}
@@ -30,9 +30,9 @@ async function findEvent(g,date){
   const pool=extras.flatMap(r=>r.status==="fulfilled"?candidates(r.value):[]);
   matched=[...new Map(pool.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
  }
- const valid=matched.filter(e=>dist(e,date)<=1&&!e.closed).sort((a,b)=>dist(a,date)-dist(b));
+ const valid=matched.filter(e=>!e.closed&&(dist(e,date)<=1||dist(e,date)===999)).sort((a,b)=>dist(a,date)-dist(b));
  const event=valid.find(e=>e.active)||valid[0]||null;
- if(event)log(g.home+": evento "+event.id+" "+event.slug);
+ if(event)log(g.home+": evento "+event.id+" "+event.slug+" | datas "+dates(event).join(","));
  else log(g.home+": sem evento validado; "+found.length+" resultados, "+matched.length+" confrontos; "+matched.slice(0,3).map(e=>e.slug+" "+dates(e).join(",")).join(" | "));
  return event;
 }
