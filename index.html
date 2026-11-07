@@ -38,23 +38,32 @@ async function findEvent(g,date){
 }
 async function markets(e){
  let all=[...(e.markets||[])];
- const req=[];
- if(e.id)req.push(api("https://gamma-api.polymarket.com/markets?event_id="+e.id+"&limit=100"));
- if(e.slug)req.push(api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug)));
- const rs=await Promise.allSettled(req);
- for(const r of rs)if(r.status==="fulfilled"){const d=r.value;all.push(...(Array.isArray(d)?d:d?.markets||[]))}
- return [...new Map(all.filter(x=>x?.id).map(m=>[String(m.id),m])).values()];
+ if(e.slug){
+  try{
+   const detail=await api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug));
+   all.push(...(detail?.markets||[]));
+  }catch(err){log(e.slug+": erro ao carregar mercados do evento "+String(err))}
+ }
+ // Não usar /markets?event_id=...: quando o filtro não é aplicado,
+ // a API devolve os primeiros 100 contratos de TODOS os eventos.
+ const clean=[...new Map(all.filter(m=>m&&m.id).map(m=>[String(m.id),m])).values()];
+ log((e.slug||e.id)+": "+clean.length+" mercados específicos deste evento");
+ return clean;
 }
 function choose(m,g,target){
- const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=norm(m.groupItemTitle),full=[q,slug,type,group].join(" ");
- if(/first half|1st half|halftime|half time|2nd half|second half|corners?|cards?|player|shots?|handicap|asian|qualification|advance|series/.test(full))return null;
+ const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=norm(m.groupItemTitle);
  const outcomes=parse(m.outcomes).map(norm);
+ const full=[q,slug,type,group,...outcomes].join(" ");
+ if(/first half|1st half|halftime|half time|2nd half|second half|corners?|cards?|player|shots?|handicap|asian|qualification|advance|series/.test(full))return null;
  if(target==="Over 2,5 FT"){
-  if(/team total|team goals|team to score|both teams/.test(full))return null;
-  if(!/(^| )2 5( |$)/.test(full))return null;
-  const ix=outcomes.findIndex(x=>x==="over"||x.startsWith("over "));
-  if(ix>=0)return ix;
-  return /over/.test(q+" "+slug)?outcomes.indexOf("yes")>=0?outcomes.indexOf("yes"):null:null;
+  if(/team total|team goals|team to score|both teams|btts/.test(full))return null;
+  const line=/(\b2 5\b|\b2 50\b|\b2\.5\b)/.test(full);
+  if(!line)return null;
+  const over=outcomes.findIndex(x=>x==="over"||x==="over 2 5"||x.startsWith("over 2 5 "));
+  if(over>=0)return over;
+  const yes=outcomes.indexOf("yes");
+  if(yes>=0&&/over|more than|total goals|total match goals/.test([q,slug,type,group].join(" ")))return yes;
+  return null;
  }
  if(target.endsWith(" ML")){
   const team=target.slice(0,-3),ix=outcomes.findIndex(x=>names(team).includes(x));
@@ -85,7 +94,7 @@ async function processGame(g,date){
   const ms=await markets(e);
   for(const r of own){
    const found=ms.map(m=>({m,idx:choose(m,g,r.market)})).filter(x=>x.idx!==null);
-   if(!found.length){r.status="Mercado não localizado ("+ms.length+")";log(g.home+" "+r.market+": nenhum dos "+ms.length+" contratos corresponde");continue}
+   if(!found.length){r.status="Mercado não localizado ("+ms.length+")";log(g.home+" "+r.market+": nenhum contrato corresponde. Amostra: "+ms.filter(m=>/goal|total|over|2[., ]5/i.test([m.question,m.slug,m.groupItemTitle,JSON.stringify(m.outcomes)].join(" "))).slice(0,10).map(m=>"ID "+m.id+" Q="+m.question+" G="+m.groupItemTitle+" O="+JSON.stringify(m.outcomes)).join(" || "));continue}
    if(found.length>1){r.status="Mercado ambíguo ("+found.length+")";log(g.home+" "+r.market+": "+found.map(x=>x.m.id+" "+x.m.question).join(" | "));continue}
    Object.assign(r,await quote(found[0].m,found[0].idx));
   }
