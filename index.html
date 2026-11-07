@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ADR | Consultor 07/11</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0b1321;color:#eaf2ff;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:25px}p,small{color:#b6c8e2}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button,input{padding:11px 14px;background:#1b304d;color:white;border:1px solid #405676;border-radius:8px;font:inherit}button{background:#176ac7;cursor:pointer}button:disabled{opacity:.5}#status{padding:12px;background:#1a2b44;border-radius:8px}.table{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px}td,th{padding:9px;border-bottom:1px solid #2d3d55;text-align:left}th{background:#17263d}.ok{color:#79e4b1}.bad{color:#ffbb8e}details{margin-top:20px}pre{white-space:pre-wrap;word-break:break-word;background:#14233a;padding:12px;max-height:350px;overflow:auto}</style></head><body><main><h1>ADR × Polymarket — Náutico × CRB — 07/11/2026</h1><p>Diagnóstico focado nos 3 mercados restantes do Náutico × CRB. Se não localizar, exporte o relatório com os nomes reais dos contratos para correção precisa.</p><div class="controls"><label>Data <input id="date" type="date" value="2026-11-07"></label><button id="run">Consultar mercados</button><button id="export" disabled>Exportar CSV</button></div><div id="status">Aguardando consulta.</div><p id="counter"></p><div class="table"><table><thead><tr><th>Confronto</th><th>Mercado</th><th>Preço (¢)</th><th>Odd</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div><section style="margin-top:24px;padding:16px;border:2px solid #508bd8;border-radius:10px"><h2>Relatório da consulta — visível automaticamente</h2><p>Após consultar, clique em Baixar relatório e envie o arquivo aqui. Não precisa abrir ferramentas técnicas.</p><button id="downloadDebug" type="button">Baixar relatório de erros (.txt)</button><pre id="debug" style="max-height:260px"></pre></section><p><small>Fonte: Gamma API + CLOB internacional. Eventos e mercados precisam corresponder à partida e à data. Odds não incluem taxas.</small></p></main><script>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ADR | Consultor 07/11</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0b1321;color:#eaf2ff;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:25px}p,small{color:#b6c8e2}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button,input{padding:11px 14px;background:#1b304d;color:white;border:1px solid #405676;border-radius:8px;font:inherit}button{background:#176ac7;cursor:pointer}button:disabled{opacity:.5}#status{padding:12px;background:#1a2b44;border-radius:8px}.table{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px}td,th{padding:9px;border-bottom:1px solid #2d3d55;text-align:left}th{background:#17263d}.ok{color:#79e4b1}.bad{color:#ffbb8e}details{margin-top:20px}pre{white-space:pre-wrap;word-break:break-word;background:#14233a;padding:12px;max-height:350px;overflow:auto}</style></head><body><main><h1>ADR × Polymarket — Náutico × CRB — 07/11/2026</h1><p>Consulta direta dos três tokens verificados pelo relatório da Polymarket: CRB ML (YES), Náutico 1X (NO CRB), CRB X2 (NO Náutico).</p><div class="controls"><label>Data <input id="date" type="date" value="2026-11-07"></label><button id="run">Consultar mercados</button><button id="export" disabled>Exportar CSV</button></div><div id="status">Aguardando consulta.</div><p id="counter"></p><div class="table"><table><thead><tr><th>Confronto</th><th>Mercado</th><th>Preço (¢)</th><th>Odd</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div><section style="margin-top:24px;padding:16px;border:2px solid #508bd8;border-radius:10px"><h2>Relatório da consulta — visível automaticamente</h2><p>Após consultar, clique em Baixar relatório e envie o arquivo aqui. Não precisa abrir ferramentas técnicas.</p><button id="downloadDebug" type="button">Baixar relatório de erros (.txt)</button><pre id="debug" style="max-height:260px"></pre></section><p><small>Fonte: Gamma API + CLOB internacional. Eventos e mercados precisam corresponder à partida e à data. Odds não incluem taxas.</small></p></main><script>
 "use strict";
 const allGames=[{"home":"Saint-Etienne","away":"Laval","codes":["Saint-Etienne","Laval"],"markets":[["Saint-Etienne ML",null]]},{"home":"Arsenal","away":"Hull City","codes":["Arsenal","Hull City"],"markets":[["Arsenal ML",null]]},{"home":"RB Leipzig","away":"Augsburg","codes":["RB Leipzig","Augsburg"],"markets":[["RB Leipzig ML",null],["Over 2,5 FT",null]]},{"home":"Mainz","away":"Bayern Munich","codes":["Mainz","Bayern Munich"],"markets":[["Bayern Munich ML",null]]},{"home":"Rosenborg","away":"Start","codes":["Rosenborg","Start"],"markets":[["Rosenborg ML",null],["Over 2,5 FT",null]]},{"home":"Roma","away":"Sassuolo","codes":["Roma","Sassuolo"],"markets":[["Roma ML",null]]},{"home":"Nottingham Forest","away":"Manchester City","codes":["Nottingham Forest","Manchester City"],"markets":[["Manchester City ML",null]]},{"home":"Birmingham City","away":"Swansea City","codes":["Birmingham City","Swansea City"],"markets":[["Birmingham City ML",null],["Over 2,5 FT",null]]},{"home":"Argentinos Juniors","away":"Huracan","codes":["Argentinos Juniors","Huracan"],"markets":[["Argentinos Juniors ML",null]]},{"home":"Borussia Dortmund","away":"Elversberg","codes":["Borussia Dortmund","Elversberg"],"markets":[["Borussia Dortmund ML",null]]},{"home":"Rosario Central","away":"Estudiantes Rio Cuarto","codes":["Rosario Central","Estudiantes Rio Cuarto"],"markets":[["Rosario Central ML",null]]},{"home":"Valencia","away":"Real Madrid","codes":["Valencia","Real Madrid"],"markets":[["Real Madrid ML",null]]},{"home":"Galatasaray","away":"Amedspor","codes":["Galatasaray","Amedspor"],"markets":[["Galatasaray ML",null],["Over 2,5 FT",null]]},{"home":"Boca Juniors","away":"Defensa y Justicia","codes":["Boca Juniors","Defensa y Justicia"],"markets":[["Boca Juniors ML",null]]},{"home":"Instituto","away":"Newells Old Boys","codes":["Instituto","Newells Old Boys"],"markets":[["Instituto ML",null]]},{"home":"Sporting CP","away":"Moreirense","codes":["Sporting CP","Moreirense"],"markets":[["Sporting CP ML",null]]},{"home":"Inter Miami","away":"Charlotte FC","codes":["Inter Miami","Charlotte FC"],"markets":[["Over 2,5 FT",null]]},{"home":"San Diego FC","away":"Sporting Kansas City","codes":["San Diego FC","Sporting Kansas City"],"markets":[["Over 2,5 FT",null]]},{"home":"Orlando City","away":"New England Revolution","codes":["Orlando City","New England Revolution"],"markets":[["Over 2,5 FT",null]]},{"home":"RAAL La Louviere","away":"Cercle Brugge","codes":["RAAL La Louviere","Cercle Brugge"],"markets":[["Over 2,5 FT",null]]},{"home":"Philadelphia Union","away":"Toronto FC","codes":["Philadelphia Union","Toronto FC"],"markets":[["Over 2,5 FT",null]]},{"home":"Luzern","away":"Young Boys","codes":["Luzern","Young Boys"],"markets":[["Over 2,5 FT",null]]}];
 const games=[{home:"Nautico",away:"CRB",markets:[["CRB ML"],["Nautico 1X"],["CRB X2"]]}];
@@ -45,6 +45,19 @@ async function markets(e){
   results.forEach((r,i)=>{if(r.status==="fulfilled"){const ms=r.value?.markets||[];all.push(...ms);log(e.slug+": "+slugs[i]+" => "+ms.length+" contratos")}else log(e.slug+": "+slugs[i]+" falhou: "+String(r.reason))});
  }
  return [...new Map(all.filter(m=>m?.id).map(m=>[String(m.id),m])).values()];
+}
+const verifiedTokens={
+ "CRB ML":"14935945461127914743381859113674249324313262354927815225133589105175769908378",
+ "Nautico 1X":"23221849799821044704936949513111054659724232717438349691115036335477247816031",
+ "CRB X2":"43624091206346609543206163032446560211732322953231829524168708310393890807664"
+};
+async function quoteToken(token){
+ try{
+  const b=await api("https://clob.polymarket.com/book?token_id="+encodeURIComponent(token));
+  const asks=(b.asks||[]).map(x=>({p:Number(x.price),size:Number(x.size)})).filter(x=>x.p>0&&x.p<1&&x.size>0).sort((a,b)=>a.p-b.p);
+  if(!asks.length)return {status:"Sem ASK"};
+  const ask=asks[0];return {price:ask.p,odd:1/ask.p,status:1/ask.p<1.16?"Odd inferior a 1,16":"ASK "+ask.size};
+ }catch(e){return {status:"CLOB: "+String(e)}}
 }
 function choose(m,g,target){
  const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=norm(m.groupItemTitle);
@@ -104,37 +117,13 @@ function render(){
 }
 async function processGame(g,date){
  const own=rows.filter(r=>r.game===g.home+" × "+g.away);
- try{
-  const e=await discoverOver(g,date);
-  if(!e){own.forEach(r=>r.status=logs.some(x=>x.includes("falhou"))?"Falha na API / conexão — veja relatório":"Evento não localizado");render();return}
-  const ms=await markets(e);
-  for(const r of own){
-   const found=ms.map(m=>({m,idx:choose(m,g,r.market)})).filter(x=>x.idx!==null);
-   if(!found.length){
-    r.status="Sem correspondência automática — veja diagnóstico";
-    const relevant=ms.filter(m=>/crb|nautico|n[aá]utico|regatas|moneyline|winner|win/i.test([m.question,m.slug,m.groupItemTitle,m.sportsMarketType].join(" ")));
-    log(g.home+" "+r.market+": "+relevant.length+" contratos candidatos; "+relevant.map(m=>"ID="+m.id+" Q="+m.question+" TYPE="+m.sportsMarketType+" GROUP="+m.groupItemTitle+" OUT="+JSON.stringify(m.outcomes)+" TOKENS="+JSON.stringify(m.clobTokenIds)).join(" || "));
-    continue;
-   }
-   const ranked=found.map(x=>({...x,score:rankContract(x.m,g,r.market),token:parse(x.m.clobTokenIds)[x.idx]})).sort((a,b)=>b.score-a.score);
-   const unique=[...new Map(ranked.filter(x=>x.token).map(x=>[x.token,x])).values()].sort((a,b)=>b.score-a.score);
-   if(!unique.length){r.status="Contrato sem token";continue}
-   if(unique.length>1&&unique[0].score===unique[1].score){
-    // Não esconder cotações por empate na pontuação de correspondência.
-    // Exibir cada contrato separadamente, com pergunta original, para auditoria.
-    r.status="Múltiplos contratos — veja opções abaixo";
-    log(g.home+" "+r.market+": candidatos distintos "+unique.map(x=>x.m.id+" "+x.m.question).join(" | "));
-    for(const [i,x] of unique.slice(0,5).entries()){
-      const price=await quote(x.m,x.idx);
-      rows.push({game:r.game,market:r.market+" — opção "+(i+1)+" [ID "+x.m.id+"]",...price,status:(price.status||"")+" | "+x.m.question});
-    }
-    continue;
-   }
-   log(g.home+" "+r.market+": selecionado "+unique[0].m.id+" "+unique[0].m.question+" ("+unique.length+" candidatos)");
-   Object.assign(r,await quote(unique[0].m,unique[0].idx));
-  }
- }catch(e){own.forEach(r=>r.status="Erro: "+String(e));log(g.home+": "+String(e))}
- render();
+ for(const r of own){
+  const token=verifiedTokens[r.market];
+  if(!token){r.status="Token não configurado";continue}
+  Object.assign(r,await quoteToken(token));
+  log(r.market+": contrato verificado "+(r.market==="CRB X2"?"6218216 NO":"6218222 "+(r.market==="CRB ML"?"YES":"NO"))+" | "+r.status);
+  render();
+ }
 }
 async function run(){
  $("run").disabled=true;$("export").disabled=true;logs=[];$("debug").textContent="";
