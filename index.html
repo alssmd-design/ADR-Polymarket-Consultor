@@ -33,49 +33,61 @@ function dateDistance(e,date){
  return ds.length?Math.min(...ds.map(v=>Math.abs(v-target)/86400000)):999;
 }
 const discoveryCache=new Map();
+const searchCache=new Map();
+function searchEvents(term){
+ const key=norm(term);
+ if(!searchCache.has(key))searchCache.set(key,(async()=>{
+  const u="https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false";
+  return eventsOf(await api(u));
+ })());
+ return searchCache.get(key);
+}
+function eventTeamTokens(e){
+ const strings=[e.title,e.ticker,e.slug,e.description,e.homeTeam,e.awayTeam,e.teams?.join?.(" ")].filter(Boolean);
+ return norm(strings.join(" "));
+}
+function eventMatch(e,g){
+ const s=eventTeamTokens(e);
+ if(both(e,g))return true;
+ // Comparação por códigos explícitos no ticker/slug, nunca por uma única equipe.
+ const homeAliases=aliases[g.home]||[g.home],awayAliases=aliases[g.away]||[g.away];
+ const initials=t=>norm(t).split(" ").filter(w=>w.length>=3&&!stopWords.has(w)).map(w=>w.slice(0,3));
+ const hs=[...new Set(homeAliases.flatMap(initials))].filter(x=>x.length===3);
+ const as=[...new Set(awayAliases.flatMap(initials))].filter(x=>x.length===3);
+ const slug=norm([e.slug,e.ticker].join(" "));
+ const tokens=new Set(slug.split(" "));
+ return hs.some(x=>tokens.has(x))&&as.some(x=>tokens.has(x));
+}
 async function discover(g,date){
- const cacheKey=g.home+"|"+g.away+"|"+date;if(discoveryCache.has(cacheKey))return discoveryCache.get(cacheKey);
- const base="https://gamma-api.polymarket.com";
- const terms=[g.home+" "+g.away,g.away+" "+g.home,g.home,g.away,
-  ...(aliases[g.home]||[]).slice(0,2),...(aliases[g.away]||[]).slice(0,2)];
- const unique=[...new Set(terms)].filter(Boolean);
- let found=[],errors=[];
- // A pesquisa pública frequentemente omite eventos encerrados ou devolve resultados paginados.
- // Consultar termos individuais, incluindo eventos inativos, e só aceitar nomes+data.
- for(const term of unique){
-  try{
-   const data=await api(base+"/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false&keep_closed_markets=1");
-   const ev=eventsOf(data);found.push(...ev);
-   logs.push(g.home+": busca '"+term+"' => "+ev.length+" eventos");
-  }catch(e){errors.push(term+": "+String(e))}
- }
- let matched=found.filter(e=>both(e,g));
- if(!matched.length){
-  // Calendário de eventos: varrer por início da partida e não por encerramento de mercado.
-  const d0=new Date(date+"T00:00:00Z");
-  const min=new Date(d0.getTime()-86400000).toISOString();
-  const max=new Date(d0.getTime()+2*86400000).toISOString();
-  for(const endpoint of [
-   "/events?limit=500&offset=0&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
-   "/events?limit=500&offset=500&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
-   "/events?limit=500&offset=1000&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max),
-   "/events?limit=500&offset=0&end_date_min="+encodeURIComponent(min)+"&end_date_max="+encodeURIComponent(max),
-   "/events?limit=500&offset=500&end_date_min="+encodeURIComponent(min)+"&end_date_max="+encodeURIComponent(max)
-  ]){
-   try{const ev=eventsOf(await api(base+endpoint));found.push(...ev);logs.push(g.home+": calendário "+endpoint.slice(0,35)+" => "+ev.length);if(ev.some(e=>both(e,g)))break}
-   catch(e){errors.push(endpoint.slice(0,25)+": "+String(e))}
+ const key=g.home+"|"+g.away+"|"+date;
+ if(discoveryCache.has(key))return discoveryCache.get(key);
+ const p=(async()=>{
+  const terms=[g.home+" "+g.away,g.home,g.away,
+   ...(aliases[g.home]||[]).slice(0,1),...(aliases[g.away]||[]).slice(0,1)];
+  const unique=[...new Set(terms)].filter(Boolean);
+  const searches=await Promise.allSettled(unique.map(searchEvents));
+  let found=[];
+  searches.forEach((r,i)=>{if(r.status==="fulfilled"){found.push(...r.value);logs.push(g.home+": '"+unique[i]+"' => "+r.value.length)}else logs.push(g.home+": erro na busca '"+unique[i]+"': "+String(r.reason))});
+  let matched=found.filter(e=>eventMatch(e,g));
+  if(!matched.length){
+   // Fallback limitado: somente duas páginas e somente uma vez por jogo.
+   const min=new Date(Date.parse(date+"T00:00:00Z")-86400000).toISOString();
+   const max=new Date(Date.parse(date+"T00:00:00Z")+2*86400000).toISOString();
+   const base="https://gamma-api.polymarket.com/events?limit=250&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max);
+   const extra=await Promise.allSettled([api(base+"&offset=0"),api(base+"&offset=250")]);
+   extra.forEach((r,i)=>{if(r.status==="fulfilled")found.push(...eventsOf(r.value));else logs.push(g.home+": calendário "+i+" "+String(r.reason))});
+   matched=found.filter(e=>eventMatch(e,g));
   }
-  matched=found.filter(e=>both(e,g));
- }
- const dedup=[...new Map(matched.map(e=>[String(e.id||e.slug),e])).values()];
- const valid=dedup.filter(e=>dateDistance(e,date)<=1&&e.closed!==true);
- valid.sort((a,b)=>dateDistance(a,date)-dateDistance(b,date));
- const selected=valid.find(e=>e.active===true)||valid[0]||null;
- logs.push(g.home+": recebidos "+found.length+", confronto "+dedup.length+", válidos "+valid.length);
- if(!selected)logs.push(g.home+": sem evento verificável. Correspondências: "+dedup.slice(0,5).map(e=>(e.title||e.slug)+" / "+eventDates(e).join(",")).join(" | ")+"; erros: "+errors.slice(0,4).join(" | "));
- else logs.push(g.home+": confirmado "+selected.title+" | "+selected.slug+" | "+eventDates(selected).join(","));
- discoveryCache.set(cacheKey,selected);
- return selected;
+  const uniqueMatches=[...new Map(matched.map(e=>[String(e.id||e.slug),e])).values()];
+  const dated=uniqueMatches.filter(e=>dateDistance(e,date)<=1&&e.closed!==true);
+  dated.sort((x,y)=>dateDistance(x,date)-dateDistance(y,date));
+  const chosen=dated.find(e=>e.active===true)||dated[0]||null;
+  if(chosen)logs.push(g.home+": EVENTO "+chosen.id+" "+chosen.slug);
+  else logs.push(g.home+": sem evento confirmado; "+found.length+" candidatos, "+uniqueMatches.length+" confrontos, "+dated.length+" com data válida. "+uniqueMatches.slice(0,4).map(e=>(e.title||e.slug)+" "+eventDates(e).join(",")).join(" | "));
+  return chosen;
+ })();
+ discoveryCache.set(key,p);
+ return p;
 }
 async function marketsFor(e){let all=[...(e.markets||[])];const urls=[];if(e.id)for(const offset of [0,100,200])urls.push("https://gamma-api.polymarket.com/markets?event_id="+e.id+"&limit=100&offset="+offset);if(e.slug){urls.push("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug));urls.push("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(e.slug+"-more-markets"))}
 const fetched=await Promise.allSettled(urls.map(api));fetched.forEach((r,i)=>{if(r.status==="fulfilled"){const x=r.value;all.push(...(Array.isArray(x)?x:x?.markets||[]))}else logs.push("mercados "+urls[i]+": "+String(r.reason))});return [...new Map(all.filter(x=>x?.id).map(m=>[String(m.id),m])).values()]}
@@ -135,7 +147,7 @@ if(/ 1\+ gol$/.test(target)){const code=target.startsWith(g.home)?g.codes[0]:g.c
 return null}
 async function quote(m,idx){const ids=parse(m.clobTokenIds),token=ids?.[idx];if(!token)return {status:"Sem token CLOB"};try{const book=await api("https://clob.polymarket.com/book?token_id="+encodeURIComponent(token));const asks=(book.asks||[]).map(x=>({p:Number(x.price),size:Number(x.size)})).filter(x=>x.p>0&&x.p<1&&x.size>0).sort((a,b)=>a.p-b.p);if(!asks.length)return {status:"Sem ASK"};const p=asks[0].p,odd=1/p;return {price:p,odd,status:odd<1.16?"Odd inferior a 1,16":"ASK "+asks[0].size}}catch(e){return {status:"CLOB: "+String(e)}}}
 function render(){const body=$("rows");body.replaceChildren();rows.forEach(r=>{const tr=document.createElement("tr");[r.game,r.market,r.score==null?"—":r.score.toFixed(1),r.price?(r.price*100).toFixed(1):"—",r.odd?r.odd.toFixed(2):"—",r.status].forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===5)td.className=r.odd>=1.16?"ok":"bad";tr.appendChild(td)});body.appendChild(tr)});$("counter").textContent=rows.filter(r=>r.odd!=null).length+"/"+rows.length+" cotações";$("debug").textContent=logs.join("\n")}
-async function run(focused=false){const date=$("date").value;$("run").disabled=true;$("focus").disabled=true;$("export").disabled=true;logs=[];const selected=games;rows=selected.flatMap(g=>g.markets.map(([market,score])=>({game:g.home+" × "+g.away,market,score,status:"Aguardando"})));render();for(const g of selected){$("status").textContent="Localizando "+g.home+" × "+g.away+"...";const own=rows.filter(r=>r.game===g.home+" × "+g.away);try{const ev=await discover(g,date);if(!ev){own.forEach(r=>r.status="Evento não localizado; veja diagnóstico");render();continue}const ms=await marketsFor(ev);logs.push(g.home+": "+ms.length+" mercados disponíveis no evento");for(const r of own){const matches=ms.map(m=>({m,idx:choose(m,g,r.market)})).filter(x=>x.idx!==null);if(matches.length===0){r.status="Mercado não localizado ("+ms.length+" examinados)";continue}if(matches.length>1){
+async function run(focused=false){const date=$("date").value;$("run").disabled=true;$("focus").disabled=true;$("export").disabled=true;logs=[];const selected=games;rows=selected.flatMap(g=>g.markets.map(([market,score])=>({game:g.home+" × "+g.away,market,score,status:"Aguardando"})));render();const processGame=async(g)=>{$("status").textContent="Localizando "+g.home+" × "+g.away+"...";const own=rows.filter(r=>r.game===g.home+" × "+g.away);try{const ev=await discover(g,date);if(!ev){own.forEach(r=>r.status="Evento não localizado; veja diagnóstico");render();continue}const ms=await marketsFor(ev);logs.push(g.home+": "+ms.length+" mercados disponíveis no evento");for(const r of own){const matches=ms.map(m=>({m,idx:choose(m,g,r.market)})).filter(x=>x.idx!==null);if(matches.length===0){r.status="Mercado não localizado ("+ms.length+" examinados)";continue}if(matches.length>1){
  const uniq=[...new Map(matches.map(x=>[String(x.m.id)+":"+x.idx,x])).values()];
  // Eventos podem trazer linhas de gols idênticas em mercados duplicados.
  // Nunca escolher arbitrariamente: mostrar contratos e seus IDs para auditoria.
@@ -152,6 +164,6 @@ async function run(focused=false){const date=$("date").value;$("run").disabled=t
  else {r.status="Ambíguo: "+uniq.length+" contratos; veja diagnóstico";logs.push(g.home+" "+r.market+": "+uniq.slice(0,12).map(x=>"ID="+x.m.id+" | "+x.m.question+" | slug="+x.m.slug+" | type="+x.m.sportsMarketType+" | group="+x.m.groupItemTitle).join(" || "));continue}
 }
  matches.splice(1)
-}Object.assign(r,await quote(matches[0].m,matches[0].idx))}render()}catch(e){logs.push(g.home+": erro "+String(e));own.forEach(r=>r.status="Erro: "+String(e));render()}}$("status").textContent="Consulta concluída: "+rows.filter(r=>r.odd!=null).length+" de "+rows.length+" mercados com preço. Consulte o diagnóstico.";$("run").disabled=false;$("focus").disabled=false;$("export").disabled=false}
+}Object.assign(r,await quote(matches[0].m,matches[0].idx))}render()}catch(e){logs.push(g.home+": erro "+String(e));own.forEach(r=>r.status="Erro: "+String(e));render()}};for(let i=0;i<selected.length;i+=4){await Promise.all(selected.slice(i,i+4).map(processGame))}$("status").textContent="Consulta concluída: "+rows.filter(r=>r.odd!=null).length+" de "+rows.length+" mercados com preço. Consulte o diagnóstico.";$("run").disabled=false;$("focus").disabled=false;$("export").disabled=false}
 $("run").addEventListener("click",()=>run(false));$("focus").addEventListener("click",()=>run(true));$("export").addEventListener("click",()=>{const data=[["Confronto","Mercado","Força","Preço","Odd","Status"],...rows.map(r=>[r.game,r.market,r.score,r.price??"",r.odd??"",r.status])];const csv="\ufeff"+data.map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(";")).join("\r\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="ADR-ML-O25-"+$("date").value+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});rows=games.flatMap(g=>g.markets.map(([market,score])=>({game:g.home+" × "+g.away,market,score,status:"Aguardando"})));render();
 </script></body></html>
