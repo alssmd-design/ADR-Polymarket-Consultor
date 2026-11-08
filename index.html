@@ -1,145 +1,32 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ADR | Consultor 07/11</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0b1321;color:#eaf2ff;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:25px}p,small{color:#b6c8e2}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button,input{padding:11px 14px;background:#1b304d;color:white;border:1px solid #405676;border-radius:8px;font:inherit}button{background:#176ac7;cursor:pointer}button:disabled{opacity:.5}#status{padding:12px;background:#1a2b44;border-radius:8px}.table{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px}td,th{padding:9px;border-bottom:1px solid #2d3d55;text-align:left}th{background:#17263d}.ok{color:#79e4b1}.bad{color:#ffbb8e}details{margin-top:20px}pre{white-space:pre-wrap;word-break:break-word;background:#14233a;padding:12px;max-height:350px;overflow:auto}</style></head><body><main><h1>ADR × Polymarket — Náutico × CRB — 07/11/2026</h1><p>Consulta direta dos três tokens verificados pelo relatório da Polymarket: CRB ML (YES), Náutico 1X (NO CRB), CRB X2 (NO Náutico).</p><div class="controls"><label>Data <input id="date" type="date" value="2026-11-07"></label><button id="run">Consultar mercados</button><button id="export" disabled>Exportar CSV</button></div><div id="status">Aguardando consulta.</div><p id="counter"></p><div class="table"><table><thead><tr><th>Confronto</th><th>Mercado</th><th>Preço (¢)</th><th>Odd</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div><section style="margin-top:24px;padding:16px;border:2px solid #508bd8;border-radius:10px"><h2>Relatório da consulta — visível automaticamente</h2><p>Após consultar, clique em Baixar relatório e envie o arquivo aqui. Não precisa abrir ferramentas técnicas.</p><button id="downloadDebug" type="button">Baixar relatório de erros (.txt)</button><pre id="debug" style="max-height:260px"></pre></section><p><small>Fonte: Gamma API + CLOB internacional. Eventos e mercados precisam corresponder à partida e à data. Odds não incluem taxas.</small></p></main><script>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ADR | Consultor 08/11 — 43 mercados</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0b1321;color:#eaf2ff;margin:0}main{max-width:1150px;margin:auto;padding:24px}h1{font-size:24px}p,small{color:#b6c8e2}.controls{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button,input{padding:11px 14px;background:#1b304d;color:white;border:1px solid #405676;border-radius:8px;font:inherit}button{background:#176ac7;cursor:pointer}button:disabled{opacity:.5}#status{padding:12px;background:#1a2b44;border-radius:8px}.table{overflow:auto}table{border-collapse:collapse;width:100%;min-width:750px}td,th{padding:9px;border-bottom:1px solid #2d3d55;text-align:left}th{background:#17263d}.ok{color:#79e4b1}.bad{color:#ffbb8e}pre{white-space:pre-wrap;word-break:break-word;background:#14233a;padding:12px;max-height:350px;overflow:auto}</style></head><body><main><h1>ADR × Polymarket — 08/11/2026</h1><p>43 seleções: 15 ML, 10 Over 2,5, 8 Over 1,5 e 10 BTTS. Consulta de ASK real, odd = 1/preço, corte 1,16. Nenhuma ordem é enviada.</p><div class="controls"><label>Data <input id="date" type="date" value="2026-11-08"></label><button id="run">Consultar os 43 mercados</button><button id="export" disabled>Exportar CSV</button><button id="errors">Baixar relatório de erros</button></div><div id="status">Aguardando consulta.</div><p id="counter"></p><div class="table"><table><thead><tr><th>Confronto</th><th>Mercado</th><th>Preço (¢)</th><th>Odd</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div><h3>Diagnóstico da busca</h3><pre id="debug"></pre><small>Fonte: Gamma API e livro CLOB. Eventos e mercados são validados por equipes, data, tipo e linha. Valores não incluem taxas e podem variar.</small></main><script>
 "use strict";
-const allGames=[{"home":"Saint-Etienne","away":"Laval","codes":["Saint-Etienne","Laval"],"markets":[["Saint-Etienne ML",null]]},{"home":"Arsenal","away":"Hull City","codes":["Arsenal","Hull City"],"markets":[["Arsenal ML",null]]},{"home":"RB Leipzig","away":"Augsburg","codes":["RB Leipzig","Augsburg"],"markets":[["RB Leipzig ML",null],["Over 2,5 FT",null]]},{"home":"Mainz","away":"Bayern Munich","codes":["Mainz","Bayern Munich"],"markets":[["Bayern Munich ML",null]]},{"home":"Rosenborg","away":"Start","codes":["Rosenborg","Start"],"markets":[["Rosenborg ML",null],["Over 2,5 FT",null]]},{"home":"Roma","away":"Sassuolo","codes":["Roma","Sassuolo"],"markets":[["Roma ML",null]]},{"home":"Nottingham Forest","away":"Manchester City","codes":["Nottingham Forest","Manchester City"],"markets":[["Manchester City ML",null]]},{"home":"Birmingham City","away":"Swansea City","codes":["Birmingham City","Swansea City"],"markets":[["Birmingham City ML",null],["Over 2,5 FT",null]]},{"home":"Argentinos Juniors","away":"Huracan","codes":["Argentinos Juniors","Huracan"],"markets":[["Argentinos Juniors ML",null]]},{"home":"Borussia Dortmund","away":"Elversberg","codes":["Borussia Dortmund","Elversberg"],"markets":[["Borussia Dortmund ML",null]]},{"home":"Rosario Central","away":"Estudiantes Rio Cuarto","codes":["Rosario Central","Estudiantes Rio Cuarto"],"markets":[["Rosario Central ML",null]]},{"home":"Valencia","away":"Real Madrid","codes":["Valencia","Real Madrid"],"markets":[["Real Madrid ML",null]]},{"home":"Galatasaray","away":"Amedspor","codes":["Galatasaray","Amedspor"],"markets":[["Galatasaray ML",null],["Over 2,5 FT",null]]},{"home":"Boca Juniors","away":"Defensa y Justicia","codes":["Boca Juniors","Defensa y Justicia"],"markets":[["Boca Juniors ML",null]]},{"home":"Instituto","away":"Newells Old Boys","codes":["Instituto","Newells Old Boys"],"markets":[["Instituto ML",null]]},{"home":"Sporting CP","away":"Moreirense","codes":["Sporting CP","Moreirense"],"markets":[["Sporting CP ML",null]]},{"home":"Inter Miami","away":"Charlotte FC","codes":["Inter Miami","Charlotte FC"],"markets":[["Over 2,5 FT",null]]},{"home":"San Diego FC","away":"Sporting Kansas City","codes":["San Diego FC","Sporting Kansas City"],"markets":[["Over 2,5 FT",null]]},{"home":"Orlando City","away":"New England Revolution","codes":["Orlando City","New England Revolution"],"markets":[["Over 2,5 FT",null]]},{"home":"RAAL La Louviere","away":"Cercle Brugge","codes":["RAAL La Louviere","Cercle Brugge"],"markets":[["Over 2,5 FT",null]]},{"home":"Philadelphia Union","away":"Toronto FC","codes":["Philadelphia Union","Toronto FC"],"markets":[["Over 2,5 FT",null]]},{"home":"Luzern","away":"Young Boys","codes":["Luzern","Young Boys"],"markets":[["Over 2,5 FT",null]]}];
-const games=[{home:"Nautico",away:"CRB",markets:[["CRB ML"],["Nautico 1X"],["CRB X2"]]}];
-const aliases={"Vila Nova":["Vila Nova FC","Vila Nova GO"],"Criciuma":["Criciúma","Criciuma EC"],"Cuiaba":["Cuiabá","Cuiaba EC"],"Juventude":["EC Juventude","Juventude RS"],"Nautico":["Náutico","Nautico PE"],"CRB":["Clube de Regatas Brasil","CRB AL"],"Saint-Etienne":["Saint Etienne","Saint-Étienne","AS Saint-Etienne","Saint-Étienne"],"Hull City":["Hull","Hull City"],"Augsburg":["FC Augsburg","Augsburg"],"Mainz":["Mainz","FSV Mainz","Mainz 05"],"Rosenborg":["Rosenborg","Rosenborg BK"],"Start":["Start","IK Start"],"Nottingham Forest":["Nottingham Forest","Nottingham"],"Manchester City":["Manchester City","Man City"],"Birmingham City":["Birmingham City","Birmingham"],"Swansea City":["Swansea City","Swansea"],"Argentinos Juniors":["Argentinos Juniors","Argentinos"],"Huracan":["Huracan","Huracán"],"Borussia Dortmund":["Borussia Dortmund","Dortmund"],"Elversberg":["Elversberg","SV Elversberg"],"Rosario Central":["Rosario Central","Rosario"],"Estudiantes Rio Cuarto":["Estudiantes Rio Cuarto","Estudiantes RC","Estudiantes de Rio Cuarto"],"Valencia":["Valencia","Valencia CF"],"Galatasaray":["Galatasaray","Galatasaray SK"],"Amedspor":["Amedspor","Amed Sportif"],"Boca Juniors":["Boca Juniors","Boca"],"Defensa y Justicia":["Defensa y Justicia","Defensa"],"Instituto":["Instituto","Instituto AC Cordoba"],"Newells Old Boys":["Newells Old Boys","Newell's Old Boys","Newells"],"Moreirense":["Moreirense","Moreirense FC"],"Inter Miami":["Inter Miami","Inter Miami CF","Miami"],"Charlotte FC":["Charlotte FC","Charlotte"],"San Diego FC":["San Diego FC","San Diego"],"Sporting Kansas City":["Sporting Kansas City","Kansas City","Sporting KC"],"Orlando City":["Orlando City","Orlando"],"New England Revolution":["New England Revolution","New England"],"RAAL La Louviere":["RAAL La Louviere","La Louviere","La Louvière"],"Cercle Brugge":["Cercle Brugge","Cercle"],"Philadelphia Union":["Philadelphia Union","Philadelphia"],"Toronto FC":["Toronto FC","Toronto"],"Luzern":["Luzern","FC Luzern","Lucerne"],"Young Boys":["Young Boys","BSC Young Boys"]};
+const games=[{"home":"AEK Athens","away":"Levadiakos","markets":["AEK Athens ML"]},{"home":"Viking","away":"KFUM Oslo","markets":["Viking ML","Over 2,5 FT","BTTS Sim"]},{"home":"Besiktas","away":"Genclerbirligi","markets":["Besiktas ML"]},{"home":"Midtjylland","away":"Sonderjyske","markets":["Midtjylland ML","Over 2,5 FT"]},{"home":"Club Brugge","away":"Anderlecht","markets":["Club Brugge ML"]},{"home":"Celtic","away":"Kilmarnock","markets":["Celtic ML"]},{"home":"Freiburg","away":"Union Berlin","markets":["Freiburg ML"]},{"home":"Lech Poznan","away":"Zaglebie Lubin","markets":["Lech Poznan ML"]},{"home":"Servette","away":"Zurich","markets":["Servette ML","Over 2,5 FT"]},{"home":"Villarreal","away":"Getafe","markets":["Villarreal ML"]},{"home":"Hearts","away":"Falkirk","markets":["Hearts ML"]},{"home":"Lens","away":"Marseille","markets":["Lens ML"]},{"home":"Goias","away":"Ponte Preta","markets":["Goias ML"]},{"home":"Ceara","away":"America MG","markets":["Ceara ML"]},{"home":"Gent","away":"Kortrijk","markets":["Gent ML"]},{"home":"Lillestrom","away":"Aalesund","markets":["Over 2,5 FT","BTTS Sim"]},{"home":"Koln","away":"Bayer Leverkusen","markets":["Over 2,5 FT","BTTS Sim"]},{"home":"Cambuur","away":"PSV","markets":["Over 2,5 FT","BTTS Sim"]},{"home":"Estrela Amadora","away":"Benfica","markets":["Over 2,5 FT"]},{"home":"Monza","away":"Atalanta","markets":["Over 2,5 FT"]},{"home":"Thun","away":"Basel","markets":["Over 2,5 FT"]},{"home":"Hoffenheim","away":"Schalke","markets":["Over 2,5 FT"]},{"home":"AZ Alkmaar","away":"Groningen","markets":["Over 1,5 FT"]},{"home":"Utrecht","away":"NEC","markets":["Over 1,5 FT","BTTS Sim"]},{"home":"Twente","away":"Ajax","markets":["Over 1,5 FT"]},{"home":"Randers","away":"Nordsjaelland","markets":["Over 1,5 FT"]},{"home":"Sint Truiden","away":"Zulte Waregem","markets":["Over 1,5 FT"]},{"home":"Copenhagen","away":"Brondby","markets":["Over 1,5 FT"]},{"home":"OFI Crete","away":"Atromitos","markets":["Over 1,5 FT"]},{"home":"Tromso","away":"Bodo Glimt","markets":["Over 1,5 FT"]},{"home":"St Gallen","away":"Lugano","markets":["BTTS Sim"]},{"home":"Ipswich","away":"Bournemouth","markets":["BTTS Sim"]},{"home":"Le Mans","away":"Monaco","markets":["BTTS Sim"]},{"home":"Legia Warsaw","away":"Rakow","markets":["BTTS Sim"]},{"home":"Inter","away":"Como","markets":["BTTS Sim"]}];
+const aliases={"AEK Athens":["AEK","AEK Athens"],"Levadiakos":["Levadiakos","Levadeiakos"],"Besiktas":["Beşiktaş","Besiktas"],"Genclerbirligi":["Gençlerbirliği","Genclerbirligi"],"Sonderjyske":["Sønderjyske","Sonderjyske"],"KFUM Oslo":["KFUM","KFUM Oslo"],"Lech Poznan":["Lech Poznań","Lech"],"Zaglebie Lubin":["Zagłębie Lubin","Zaglebie"],"Zurich":["FC Zurich","Zürich","Zurich"],"Goias":["Goiás","Goias"],"Ceara":["Ceará","Ceara"],"America MG":["América Mineiro","America MG","America Mineiro"],"Lillestrom":["Lillestrøm","Lillestrom"],"Koln":["Köln","Cologne","FC Koln"],"Bayer Leverkusen":["Leverkusen","Bayer Leverkusen"],"Nordsjaelland":["Nordsjælland","Nordsjaelland"],"Sint Truiden":["Sint-Truiden","STVV"],"Brondby":["Brøndby","Brondby"],"Tromso":["Tromsø","Tromso"],"Bodo Glimt":["Bodø/Glimt","Bodo Glimt","Bodø Glimt"],"St Gallen":["St. Gallen","St Gallen"],"Rakow":["Raków","Rakow"],"Legia Warsaw":["Legia Warszawa","Legia Warsaw"],"OFI Crete":["OFI","OFI Crete"],"Copenhagen":["FC Copenhagen","Kobenhavn","Copenhagen"],"Thun":["FC Thun","Thun"],"Inter":["Inter Milan","Internazionale","Inter"],"Gent":["KAA Gent","Gent"],"Kortrijk":["KV Kortrijk","Kortrijk"]};
 const $=id=>document.getElementById(id);
-const norm=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-const parse=x=>{if(Array.isArray(x))return x;try{return JSON.parse(x||"[]")}catch{return []}};
-let rows=[],logs=[],eventsCache=new Map();
-const log=x=>{logs.push(x);$("debug").textContent=logs.join("\n")};
-async function api(url,timeout=8500){const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}
-function words(s){return norm(s).split(" ").filter(x=>x.length>2&&!["city","club","football","united","sporting","sport","real","saint","santa","fc","cf","sc"].includes(x))}
-function names(t){return [t,...(aliases[t]||[])].map(norm).filter(Boolean)}
-function isTeam(text,t){const s=" "+norm(text)+" ";return names(t).some(n=>s.includes(" "+n+" ")||words(n).some(w=>w.length>=5&&s.includes(" "+w+" ")))}
-function eventMatch(e,g){
- const text=[e.title,e.slug,e.ticker,e.homeTeam,e.awayTeam,e.description].filter(Boolean).join(" ");
- return isTeam(text,g.home)&&isTeam(text,g.away);
-}
-function dates(e){return [e.gameStartTime,e.eventDate,e.startTime,e.startDate,e.start_date,e.endDate,e.slug].filter(Boolean).map(String)}
-function dist(e,d){const target=Date.parse(d+"T12:00:00Z");const ds=dates(e).flatMap(x=>[...x.matchAll(/20\d{2}[-/]\d{2}[-/]\d{2}/g)].map(z=>Date.parse(z[0].replaceAll("/","-")+"T12:00:00Z"))).filter(Number.isFinite);return ds.length?Math.min(...ds.map(x=>Math.abs(x-target)/86400000)):999}
-function candidates(data){const v=Array.isArray(data)?data:(data?.events||data?.results?.events||data?.data?.events||[]);return Array.isArray(v)?v:[]}
-async function search(term){const key=norm(term);if(!eventsCache.has(key))eventsCache.set(key,api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(term)+"&limit_per_type=100&search_profiles=false").then(candidates));return eventsCache.get(key)}
-async function findEvent(g,date){
- const q=[g.home+" "+g.away,g.home];
- const found=(await Promise.allSettled(q.map(search))).flatMap((r,i)=>{if(r.status==="fulfilled"){log(g.home+": busca "+q[i]+" retornou "+r.value.length+" eventos");return r.value}log(g.home+": busca "+q[i]+" falhou "+String(r.reason));return []});
- let matched=[...new Map(found.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
- if(!matched.length){
-  const min=new Date(Date.parse(date+"T00:00:00Z")-86400000).toISOString(),max=new Date(Date.parse(date+"T00:00:00Z")+2*86400000).toISOString();
-  const urls=[0].map(offset=>"https://gamma-api.polymarket.com/events?limit=250&offset="+offset+"&start_date_min="+encodeURIComponent(min)+"&start_date_max="+encodeURIComponent(max));
-  const extras=await Promise.allSettled(urls.map(u=>api(u,7000)));
-  const pool=extras.flatMap((r,i)=>{if(r.status==="fulfilled"){const arr=candidates(r.value);log(g.home+": calendário "+i+" retornou "+arr.length);return arr}log(g.home+": calendário "+i+" falhou "+String(r.reason));return []});
-  matched=[...new Map(pool.filter(e=>eventMatch(e,g)).map(e=>[String(e.id||e.slug),e])).values()];
- }
- const valid=matched.filter(e=>(dist(e,date)<=1||dist(e,date)===999)).sort((a,b)=>dist(a,date)-dist(b));
- const event=valid.find(e=>e.active)||valid[0]||null;
- if(event)log(g.home+": evento "+event.id+" "+event.slug+" | datas "+dates(event).join(","));
- else log(g.home+": sem evento validado; "+found.length+" resultados, "+matched.length+" confrontos; "+matched.slice(0,3).map(e=>e.slug+" "+dates(e).join(",")).join(" | "));
- return event;
-}
-async function markets(e){
- let all=[...(e.markets||[])];
- if(e.slug){
-  const slugs=[e.slug,e.slug+"-more-markets"];
-  const results=await Promise.allSettled(slugs.map(slug=>api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(slug),7500)));
-  results.forEach((r,i)=>{if(r.status==="fulfilled"){const ms=r.value?.markets||[];all.push(...ms);log(e.slug+": "+slugs[i]+" => "+ms.length+" contratos")}else log(e.slug+": "+slugs[i]+" falhou: "+String(r.reason))});
- }
- return [...new Map(all.filter(m=>m?.id).map(m=>[String(m.id),m])).values()];
-}
-const verifiedTokens={
- "CRB ML":"14935945461127914743381859113674249324313262354927815225133589105175769908378",
- "Nautico 1X":"23221849799821044704936949513111054659724232717438349691115036335477247816031",
- "CRB X2":"43624091206346609543206163032446560211732322953231829524168708310393890807664"
-};
-async function quoteToken(token){
- try{
-  const b=await api("https://clob.polymarket.com/book?token_id="+encodeURIComponent(token));
-  const asks=(b.asks||[]).map(x=>({p:Number(x.price),size:Number(x.size)})).filter(x=>x.p>0&&x.p<1&&x.size>0).sort((a,b)=>a.p-b.p);
-  if(!asks.length)return {status:"Sem ASK"};
-  const ask=asks[0];return {price:ask.p,odd:1/ask.p,status:1/ask.p<1.16?"Odd inferior a 1,16":"ASK "+ask.size};
- }catch(e){return {status:"CLOB: "+String(e)}}
-}
-function choose(m,g,target){
- const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=norm(m.groupItemTitle);
- const outs=parse(m.outcomes).map(norm),full=[q,slug,type,group].join(" ");
- if(/first half|1st half|halftime|half time|second half|2nd half|corners?|cards?|player|shots?|handicap|team total|team goals|team to score|both teams|btts|qualification|advance/.test(full))return null;
- const team=target.replace(/ (ML|1X|X2)$/,"");
- const opponent=team===g.home?g.away:g.home;
- const yes=outs.indexOf("yes"),no=outs.indexOf("no");
- if(yes<0||no<0)return null; // só contratos binários de vitória, nunca 1X2 com empate
- if(!/win|winner|victory|beat|moneyline/.test(full))return null;
- const wanted=target.endsWith(" ML")?team:opponent;
- // Exige que o sujeito da pergunta seja o time, e não apenas que o nome apareça no confronto.
- const namesWanted=names(wanted);
- const subject=namesWanted.some(n=>q.startsWith("will "+n+" win")||q.startsWith("will "+n+" beat")||q.startsWith("does "+n+" win")||q.startsWith(n+" to win")||q.startsWith(n+" win")||q.startsWith(n+" moneyline"));
- if(!subject)return null;
- if(target.endsWith(" ML"))return yes;
- if(target.endsWith(" 1X")||target.endsWith(" X2"))return no;
- return null;
-}
-function rankContract(m,g,target){
- const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType);
- const team=target.replace(/ (ML|1X|X2)$/,""),opponent=team===g.home?g.away:g.home;
- const wanted=target.endsWith(" ML")?team:opponent;
- let score=0;
- if(q.startsWith("will "+norm(wanted)+" win"))score+=8;
- if(q.includes(norm(wanted)+" win"))score+=5;
- if(q.includes(norm(wanted)))score+=2;
- if(/moneyline|winner|win/.test(type))score+=2;
- if(/more markets|first half|half time|to qualify/.test(slug))score-=10;
- return score;
-}
-async function discoverOver(g,date){
- const base=await findEvent(g,date);
- if(base)return base;
- // Alguns totais aparecem como evento separado: procurar por ambos os times.
- const terms=[g.away];
- const rs=await Promise.allSettled(terms.map(search));
- const pool=rs.flatMap((r,i)=>{if(r.status==="fulfilled")return r.value;log(g.home+" busca over "+terms[i]+": "+String(r.reason));return []});
- const match=pool.filter(e=>eventMatch(e,g)&&(dist(e,date)<=1||dist(e,date)===999));
- const chosen=match.find(e=>e.active)||match[0]||null;
- if(chosen)log(g.home+": evento adicional "+chosen.slug);
- return chosen;
-}
-async function quote(m,idx){
- const token=parse(m.clobTokenIds)[idx];if(!token)return {status:"Sem token"};
- try{
-  const b=await api("https://clob.polymarket.com/book?token_id="+encodeURIComponent(token),7000);
-  const ask=(b.asks||[]).map(x=>({p:Number(x.price),size:Number(x.size)})).filter(x=>x.p>0&&x.p<1&&x.size>0).sort((a,b)=>a.p-b.p)[0];
-  if(!ask)return {status:"Sem ASK"};
-  return {price:ask.p,odd:1/ask.p,status:1/ask.p<1.16?"Odd inferior a 1,16":"ASK "+ask.size};
- }catch(e){return {status:"CLOB: "+String(e)}}
-}
-function render(){
- const body=$("rows");body.replaceChildren();
- for(const r of rows){const tr=document.createElement("tr");[r.game,r.market,r.price==null?"—":(100*r.price).toFixed(1),r.odd==null?"—":r.odd.toFixed(2),r.status].forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===4)td.className=r.odd>=1.16?"ok":"bad";tr.appendChild(td)});body.appendChild(tr)}
- $("counter").textContent=rows.filter(x=>x.odd!=null).length+"/"+rows.length+" preços";
-}
-async function processGame(g,date){
- const own=rows.filter(r=>r.game===g.home+" × "+g.away);
- for(const r of own){
-  const token=verifiedTokens[r.market];
-  if(!token){r.status="Token não configurado";continue}
-  Object.assign(r,await quoteToken(token));
-  log(r.market+": contrato verificado "+(r.market==="CRB X2"?"6218216 NO":"6218222 "+(r.market==="CRB ML"?"YES":"NO"))+" | "+r.status);
-  render();
- }
-}
-async function run(){
- $("run").disabled=true;$("export").disabled=true;logs=[];$("debug").textContent="";
- eventsCache.clear();
- rows=games.flatMap(g=>g.markets.map(([market])=>({game:g.home+" × "+g.away,market,status:"Aguardando"})));
- render();const date=$("date").value;
- for(let i=0;i<games.length;i+=2){$("status").textContent="Consultando "+Math.min(i+2,games.length)+"/"+games.length+" jogos...";await Promise.all(games.slice(i,i+2).map(g=>processGame(g,date)))}
- $("status").textContent="Concluído: "+rows.filter(x=>x.odd!=null).length+"/"+rows.length+" preços. Baixe o relatório de erros abaixo se houver ausências.";
- $("run").disabled=false;$("export").disabled=false;
-}
-$("downloadDebug").addEventListener("click",()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([`ADR Série B — ${$("date").value}\n${$("status").textContent}\n\n${$("debug").textContent}\n\n${rows.map(r=>r.game+" | "+r.market+" | "+r.status).join("\n")}`],{type:"text/plain;charset=utf-8"}));a.download="ADR-relatorio-erros.txt";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});
+const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const parse=x=>Array.isArray(x)?x:(()=>{try{return JSON.parse(x||"[]")}catch{return []}})();
+const names=s=>[s,...(aliases[s]||[])].map(norm);
+const teamIn=(s,t)=>names(t).some(n=>n.length>2&&(" "+norm(s)+" ").includes(" "+n+" "));
+const log=s=>{logs.push(s);$("debug").textContent=logs.join("\n")};
+let rows=[],logs=[],cache=new Map();
+async function api(url){const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);try{const r=await fetch(url,{signal:ctrl.signal,cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}}
+async function search(q){if(!cache.has(q))cache.set(q,api("https://gamma-api.polymarket.com/public-search?q="+encodeURIComponent(q)+"&limit_per_type=100&search_profiles=false").then(x=>x.events||x.results?.events||[]).catch(e=>{log("Busca "+q+": "+e);return []}));return cache.get(q)}
+function eventDate(e){const s=[e.gameStartTime,e.eventDate,e.startTime,e.startDate,e.slug].filter(Boolean).join(" ");const m=s.match(/20\d{2}-\d{2}-\d{2}/);return m?m[0]:null}
+function eventMatches(e,g,date){const s=[e.title,e.slug,e.ticker,e.homeTeam,e.awayTeam].filter(Boolean).join(" ");const d=eventDate(e);if(d&&Math.abs(Date.parse(d)-Date.parse(date))/86400000>1)return false;return teamIn(s,g.home)&&teamIn(s,g.away)}
+async function findEvents(g,date){let pools=(await Promise.all([search(g.home+" "+g.away),search(g.home),search(g.away)])).flat();let found=[...new Map(pools.filter(e=>eventMatches(e,g,date)).map(e=>[String(e.id||e.slug),e])).values()];if(!found.length){try{const d1=new Date(Date.parse(date+"T00:00:00Z")-86400000).toISOString(),d2=new Date(Date.parse(date+"T00:00:00Z")+172800000).toISOString();const data=await api("https://gamma-api.polymarket.com/events?limit=500&start_date_min="+encodeURIComponent(d1)+"&start_date_max="+encodeURIComponent(d2));found=data.filter(e=>eventMatches(e,g,date))}catch(e){log(g.home+": calendário "+e)}}return found.sort((a,b)=>Number(!!b.active)-Number(!!a.active))}
+async function getMarkets(e){let all=[...(e.markets||[])];for(const slug of [e.slug,e.slug+"-more-markets"]){if(!slug)continue;try{const x=await api("https://gamma-api.polymarket.com/events/slug/"+encodeURIComponent(slug));all.push(...(x.markets||[]))}catch(e){}}return [...new Map(all.filter(m=>m?.id).map(m=>[String(m.id),m])).values()]}
+function select(m,g,target){const q=norm(m.question),slug=norm(m.slug),type=norm(m.sportsMarketType),group=norm(m.groupItemTitle),all=[q,slug,type,group].join(" ");const outs=parse(m.outcomes).map(norm),yes=outs.indexOf("yes"),no=outs.indexOf("no");if(/first half|1st half|halftime|half time|second half|2nd half|corners?|cards?|player|shots?|handicap|team total|team goals|team to score|qualification|advance/.test(all))return null;
+if(target.endsWith(" ML")){if(yes<0||no<0||!/win|winner|victory|beat|moneyline/.test(all))return null;const team=target.slice(0,-3);const subject=names(team).some(n=>q.startsWith("will "+n+" win")||q.startsWith("will "+n+" beat")||q.startsWith(n+" to win")||q.startsWith(n+" win")||q.startsWith(n+" moneyline"));return subject?yes:null}
+if(target.startsWith("Over ")){if(!/total|goals|over|under/.test(all)||/both teams|btts/.test(all))return null;const line=target.includes("2,5")?"2 5":"1 5";if(!new RegExp("(^| )"+line.replace(" ","[ ._]?")+"( |$)").test(all))return null;if(/home team|away team|team total|team goals|to score/.test(all))return null;const over=outs.findIndex(x=>x==="over"||x.startsWith("over "+line)||x.startsWith("over "+line.replace(" ",".")));if(over>=0)return over;if(yes>=0&&no>=0&&/over/.test(q))return yes;return null}
+if(target==="BTTS Sim"){if(!/both teams to score|both teams score|btts|both teams will score/.test(all))return null;return yes>=0?yes:outs.indexOf("yes")}
+return null}
+async function quote(m,idx){const token=parse(m.clobTokenIds)[idx];if(!token)return {status:"Sem token"};try{const b=await api("https://clob.polymarket.com/book?token_id="+encodeURIComponent(token));const ask=(b.asks||[]).map(x=>({p:Number(x.price),size:Number(x.size)})).filter(x=>x.p>0&&x.p<1&&x.size>0).sort((a,b)=>a.p-b.p)[0];if(!ask)return {status:"Sem ASK"};return {price:ask.p,odd:1/ask.p,status:1/ask.p<1.16?"Odd inferior a 1,16":"ASK "+ask.size,token}}catch(e){return {status:"CLOB: "+e}}}
+function render(){const b=$("rows");b.replaceChildren();for(const r of rows){const tr=document.createElement("tr");[r.game,r.market,r.price==null?"—":(100*r.price).toFixed(1),r.odd==null?"—":r.odd.toFixed(3),r.status].forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===4)td.className=r.odd>=1.16?"ok":"bad";tr.appendChild(td)});b.appendChild(tr)}$("counter").textContent=rows.filter(x=>x.odd!=null).length+"/"+rows.length+" preços"}
+async function process(g,date){const own=rows.filter(r=>r.game===g.home+" × "+g.away);try{const evs=await findEvents(g,date);if(!evs.length){own.forEach(r=>r.status="Evento não localizado");log(g.home+" × "+g.away+": evento não localizado");return}const all=(await Promise.all(evs.slice(0,4).map(getMarkets))).flat();const markets=[...new Map(all.filter(m=>m.id).map(m=>[String(m.id),m])).values()];log(g.home+" × "+g.away+": "+evs.length+" eventos; "+markets.length+" contratos");for(const r of own){const matches=markets.map(m=>({m,idx:select(m,g,r.market)})).filter(x=>x.idx!=null);if(!matches.length){r.status="Mercado não localizado";log(r.game+" | "+r.market+" | mercado ausente");continue}let best=null;for(const x of matches.slice(0,8)){const q=await quote(x.m,x.idx);if(q.odd!=null&&(!best||q.price<best.price))best={...q,contract:x.m.question};else if(!best)best={...q,contract:x.m.question}}Object.assign(r,best||{status:"Sem ASK"});log(r.game+" | "+r.market+" | "+r.status+" | "+(r.contract||""));render()}}catch(e){own.forEach(r=>r.status="Erro: "+e);log(g.home+": "+e)}render()}
+async function run(){$("run").disabled=true;$("export").disabled=true;logs=[];cache.clear();rows=games.flatMap(g=>g.markets.map(m=>({game:g.home+" × "+g.away,market:m,status:"Aguardando"})));render();const date=$("date").value;for(let i=0;i<games.length;i+=3){$("status").textContent="Consultando "+Math.min(i+3,games.length)+"/"+games.length+" jogos...";await Promise.all(games.slice(i,i+3).map(g=>process(g,date)))}$("status").textContent="Concluído: "+rows.filter(r=>r.odd!=null).length+"/"+rows.length+" preços. Consulte os diagnósticos."; $("run").disabled=false;$("export").disabled=false}
+function download(name,data,type){const a=document.createElement("a"),url=URL.createObjectURL(new Blob([data],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 $("run").addEventListener("click",run);
-$("export").addEventListener("click",()=>{
- const data=[["Confronto","Mercado","Preço","Odd","Status"],...rows.map(r=>[r.game,r.market,r.price??"",r.odd??"",r.status])];
- const csv="\ufeff"+data.map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(";")).join("\r\n");
- const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="ADR-Serie-B-pendencias-2026-11-07.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-});
-rows=games.flatMap(g=>g.markets.map(([market])=>({game:g.home+" × "+g.away,market,status:"Aguardando"})));render();
+$("export").addEventListener("click",()=>{const data=[["Confronto","Mercado","Preço","Odd","Status","Contrato","Token"],...rows.map(r=>[r.game,r.market,r.price??"",r.odd??"",r.status,r.contract??"",r.token??""])];download("ADR-43-mercados-2026-11-08.csv","\ufeff"+data.map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(";")).join("\r\n"),"text/csv;charset=utf-8")});
+$("errors").addEventListener("click",()=>download("ADR-erros-2026-11-08.txt",logs.join("\n")+"\n\n"+rows.map(r=>r.game+" | "+r.market+" | "+r.status).join("\n"),"text/plain;charset=utf-8"));
+rows=games.flatMap(g=>g.markets.map(m=>({game:g.home+" × "+g.away,market:m,status:"Aguardando"})));render();
 </script></body></html>
